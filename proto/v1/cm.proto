@@ -9,6 +9,12 @@ message LogEntry {
   int64 real_idx = 3;
 }
 
+message PersistentState {
+  int32 term = 1;
+  int32 voted_for = 2;
+  repeated LogEntry log = 3;
+}
+
 message RequestVoteRequest {
   int32 term = 1;
   int32 candidate_id = 2;
