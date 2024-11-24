@@ -49,7 +49,7 @@ func main() {
 		raftID, peers, logger, store, dummyCommitApplier,
 	)
 
-	httpServer := network.NewHTTPServer(*addr, cm, false, logger)
+	httpServer := network.NewHTTPServer(*addr, cm, *h2c, logger)
 
 	ctx, done := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer done()
