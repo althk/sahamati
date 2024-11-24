@@ -209,46 +209,43 @@ func (c *ConsensusModule) becomeLeader() {
 	}
 
 	c.heartbeatTicker = time.NewTicker(40 * time.Millisecond)
-
-	go c.sendHeartbeats()
-	go c.monitorAEChan()
+	c.aeReadyCh = make(chan bool)
+	go c.handleAEsAndHeartbeats()
 }
 
-func (c *ConsensusModule) monitorAEChan() {
+func (c *ConsensusModule) handleAEsAndHeartbeats() {
+	c.sendAppendEntries()
+
 	for {
-		<-c.aeReadyCh
-		c.mu.RLock()
-		if c.state != Leader {
-			c.mu.RUnlock()
-			return
+		select {
+		case _, ok := <-c.heartbeatTicker.C:
+			if !ok {
+				return
+			}
+		case _, ok := <-c.aeReadyCh:
+			if !ok {
+				return
+			}
 		}
-		currTerm := c.currentTerm
-		c.mu.RUnlock()
-		for _, peer := range c.peers {
-			go c.sendAppendEntries(peer, currTerm)
-		}
+		c.sendAppendEntries()
 	}
 }
 
-func (c *ConsensusModule) sendHeartbeats() {
-	for {
-		c.mu.RLock()
-		if c.state != Leader {
-			c.mu.RUnlock()
-			c.heartbeatTicker.Stop()
-			return
-		}
-		currTerm := c.currentTerm
+func (c *ConsensusModule) sendAppendEntries() {
+	c.mu.RLock()
+	if c.state != Leader {
 		c.mu.RUnlock()
-
-		for _, peer := range c.peers {
-			go c.sendAppendEntries(peer, currTerm)
-		}
-		<-c.heartbeatTicker.C
+		c.heartbeatTicker.Stop()
+		return
+	}
+	currTerm := c.currentTerm
+	c.mu.RUnlock()
+	for _, peer := range c.peers {
+		go c.sendAppendEntriesToPeer(peer, currTerm)
 	}
 }
 
-func (c *ConsensusModule) sendAppendEntries(peer Peer, savedTerm int) {
+func (c *ConsensusModule) sendAppendEntriesToPeer(peer Peer, savedTerm int) {
 	client := getRPCClient(peer)
 	c.mu.RLock()
 	ni := c.nextIndex[peer.ID]
@@ -295,7 +292,9 @@ func (c *ConsensusModule) processAppendEntriesResponse(req *pb.AppendEntriesRequ
 		c.mu.Unlock()
 
 		c.advanceCommitIndex()
+		return
 	}
+	c.mu.Unlock()
 }
 
 func (c *ConsensusModule) HandleVoteRequest(_ context.Context, req *pb.RequestVoteRequest) (*pb.RequestVoteResponse, error) {
@@ -379,19 +378,26 @@ func (c *ConsensusModule) logState() {
 		c.logger.Info("CM Status",
 			slog.String("currentTerm", fmt.Sprintf("%v", c.currentTerm)),
 			slog.String("votedFor", fmt.Sprintf("%v", c.votedFor)),
-			slog.String("state", fmt.Sprintf("%v", c.state)))
+			slog.String("state", fmt.Sprintf("%v", c.state)),
+			slog.String("raft-id", fmt.Sprintf("%v", c.id)),
+		)
 		c.mu.RUnlock()
 	}
 }
 
+func (c *ConsensusModule) cmState() (id int, currentTerm int, votedFor int, state State) {
+	return c.id, c.currentTerm, c.votedFor, c.state
+}
+
 func (c *ConsensusModule) Propose(cmd []byte) int64 {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.state != Leader {
+		c.mu.Unlock()
 		return -1
 	}
 	c.realIdx += 1
 	c.log = append(c.log, &pb.LogEntry{Term: int32(c.currentTerm), Command: cmd, RealIdx: c.realIdx})
+	c.mu.Unlock()
 	c.aeReadyCh <- true
 	return c.realIdx
 }
@@ -414,6 +420,7 @@ func (c *ConsensusModule) advanceCommitIndex() {
 	}
 	if commitIdx > c.commitIndex {
 		c.applyCommits()
+		c.aeReadyCh <- true
 	}
 }
 
