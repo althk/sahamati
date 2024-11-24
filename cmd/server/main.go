@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"github.com/althk/sahamati/network"
+	pb "github.com/althk/sahamati/proto/v1"
 	"github.com/althk/sahamati/raft"
 	"log"
 	"log/slog"
@@ -40,8 +41,10 @@ func main() {
 		}
 	}
 
+	dummyCommitApplier := func(entries []*pb.LogEntry) {}
+
 	cm := raft.NewConsensusModule(
-		*raftID, peers, logger,
+		*raftID, peers, logger, dummyCommitApplier,
 	)
 
 	httpServer := network.NewHTTPServer(*addr, cm, false, logger)
