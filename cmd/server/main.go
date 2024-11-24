@@ -7,7 +7,6 @@ import (
 	"github.com/althk/sahamati/network"
 	pb "github.com/althk/sahamati/proto/v1"
 	"github.com/althk/sahamati/raft"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -19,8 +18,7 @@ var (
 	addr     = flag.String("addr", ":6001", "raft node address")
 	allNodes = flag.String("nodes", "", `comma separated list of all nodes in this cluster, 
 including the current host, in the form 'host1:port1,host2:port2'`)
-	raftID = flag.Int("raft-id", -1, "ID of raft node, must be unique in a cluster")
-	h2c    = flag.Bool("no-tls", false, "whether to use HTTP2 WITHOUT TLS (via h2c)")
+	h2c = flag.Bool("no-tls", false, "whether to use HTTP2 WITHOUT TLS (via h2c)")
 )
 
 func main() {
@@ -28,23 +26,25 @@ func main() {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	if *raftID == -1 {
-		log.Fatal("raft-id is required and must be non-negative")
-	}
 	peers := make(map[int]raft.Peer)
+	raftID := -1
 
-	for i, addr := range strings.Split(*allNodes, ",") {
+	for i, peerAddr := range strings.Split(*allNodes, ",") {
+		if peerAddr == *addr {
+			raftID = i + 1
+			continue
+		}
 		peers[i] = raft.Peer{
-			ID:     i,
-			Addr:   addr,
-			Client: network.NewCMClient(addr, false),
+			ID:     i + 1,
+			Addr:   peerAddr,
+			Client: network.NewCMClient(peerAddr, false),
 		}
 	}
 
 	dummyCommitApplier := func(entries []*pb.LogEntry) {}
 
 	cm := raft.NewConsensusModule(
-		*raftID, peers, logger, dummyCommitApplier,
+		raftID, peers, logger, dummyCommitApplier,
 	)
 
 	httpServer := network.NewHTTPServer(*addr, cm, false, logger)
