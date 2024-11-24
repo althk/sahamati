@@ -1,0 +1,40 @@
+syntax="proto3";
+package proto.v1;
+
+option go_package = "github.com/althk/sahamati/proto/v1;cmv1";
+
+message LogEntry {
+  int32 term = 1;
+  bytes command = 2;
+}
+
+message RequestVoteRequest {
+  int32 term = 1;
+  int32 candidate_id = 2;
+  int32 last_log_idx = 3;
+  int32 last_log_term = 4;
+}
+
+message RequestVoteResponse {
+  int32 term = 1;
+  bool vote_granted = 2;
+}
+
+message AppendEntriesRequest {
+  int32 term = 1;
+  int32 leader_id = 2;
+  int32 prev_log_idx = 3;
+  int32 prev_log_term = 4;
+  int32 leader_commit_id =5;
+  repeated LogEntry entries = 6;
+}
+
+message AppendEntriesResponse {
+  int32 term = 1;
+  bool success = 2;
+}
+
+service CMService {
+  rpc RequestVote(RequestVoteRequest) returns (RequestVoteResponse) {}
+  rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse) {}
+}
