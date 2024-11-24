@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"github.com/althk/sahamati/network"
+	"github.com/althk/sahamati/persistence"
 	pb "github.com/althk/sahamati/proto/v1"
 	"github.com/althk/sahamati/raft"
 	"log/slog"
@@ -42,9 +43,10 @@ func main() {
 	}
 
 	dummyCommitApplier := func(entries []*pb.LogEntry) {}
+	store := persistence.NewMemStore()
 
 	cm := raft.NewConsensusModule(
-		raftID, peers, logger, dummyCommitApplier,
+		raftID, peers, logger, store, dummyCommitApplier,
 	)
 
 	httpServer := network.NewHTTPServer(*addr, cm, false, logger)

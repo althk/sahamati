@@ -29,6 +29,12 @@ type peerClient interface {
 	AppendEntries(ctx context.Context, req *pb.AppendEntriesRequest) (*pb.AppendEntriesResponse, error)
 }
 
+type persistence interface {
+	Load() (*pb.PersistentState, error)
+	Save(*pb.PersistentState) error
+	HasData() bool
+}
+
 type commitApplier func(entries []*pb.LogEntry)
 
 func getRPCClient(peer Peer) peerClient {
@@ -60,9 +66,10 @@ type ConsensusModule struct {
 
 	mu     sync.RWMutex
 	logger *slog.Logger
+	store  persistence
 }
 
-func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, applyCB commitApplier) *ConsensusModule {
+func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, store persistence, applyCB commitApplier) *ConsensusModule {
 	return &ConsensusModule{
 		id:          id,
 		votedFor:    -1,
@@ -74,12 +81,12 @@ func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, applyCB
 		applyCB:     applyCB,
 		nextIndex:   make(map[int]int),
 		matchIndex:  make(map[int]int),
+		store:       store,
 	}
 }
 
 func (c *ConsensusModule) Init() {
-	// load from snapshot if available here
-
+	c.loadFromStore()
 	c.becomeFollower(0)
 	go c.logState()
 }
@@ -397,6 +404,10 @@ func (c *ConsensusModule) Propose(cmd []byte) int64 {
 	}
 	c.realIdx += 1
 	c.log = append(c.log, &pb.LogEntry{Term: int32(c.currentTerm), Command: cmd, RealIdx: c.realIdx})
+	err := c.persistState()
+	if err != nil {
+		return -1
+	}
 	c.mu.Unlock()
 	c.aeReadyCh <- true
 	return c.realIdx
@@ -435,6 +446,29 @@ func (c *ConsensusModule) applyCommits() {
 	c.mu.Unlock()
 
 	c.applyCB(entries)
+}
+
+func (c *ConsensusModule) loadFromStore() {
+	if !c.store.HasData() {
+		return
+	}
+	s, err := c.store.Load()
+	if err != nil {
+		panic(err)
+		return
+	}
+	c.currentTerm = int(s.Term)
+	c.votedFor = int(s.VotedFor)
+	c.log = s.Log
+}
+
+func (c *ConsensusModule) persistState() error {
+	s := &pb.PersistentState{
+		Term:     int32(c.currentTerm),
+		VotedFor: int32(c.votedFor),
+		Log:      c.log,
+	}
+	return c.store.Save(s)
 }
 
 func electionTimeout() time.Duration {
