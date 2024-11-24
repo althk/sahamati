@@ -140,7 +140,7 @@ func (c *ConsensusModule) startElection() {
 
 func (c *ConsensusModule) lastLogIndexAndTerm() (int, int) {
 	if len(c.log) == 0 {
-		return -1, 0
+		return -1, -1
 	}
 	return len(c.log) - 1, int(c.log[len(c.log)-1].Term)
 }
