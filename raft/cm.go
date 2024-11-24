@@ -52,8 +52,8 @@ type ConsensusModule struct {
 
 	commitIndex int
 	lastApplied int
-	nextIndex   []int
-	matchIndex  []int
+	nextIndex   map[int]int
+	matchIndex  map[int]int
 
 	aeReadyCh chan bool
 	applyCB   commitApplier
@@ -72,6 +72,8 @@ func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, applyCB
 		logger:      logger,
 		aeReadyCh:   make(chan bool),
 		applyCB:     applyCB,
+		nextIndex:   make(map[int]int),
+		matchIndex:  make(map[int]int),
 	}
 }
 
@@ -200,6 +202,12 @@ func (c *ConsensusModule) becomeLeader() {
 		return
 	}
 	c.state = Leader
+
+	for _, peer := range c.peers {
+		c.nextIndex[peer.ID] = len(c.log)
+		c.matchIndex[peer.ID] = -1
+	}
+
 	c.heartbeatTicker = time.NewTicker(40 * time.Millisecond)
 
 	go c.sendHeartbeats()
@@ -336,7 +344,8 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 		return &resp, nil
 	}
 
-	if req.PrevLogIdx >= int32(len(c.log)) || req.PrevLogTerm != c.log[req.PrevLogIdx].Term {
+	if req.PrevLogIdx >= 0 &&
+		(req.PrevLogIdx >= int32(len(c.log)) || req.PrevLogTerm != c.log[req.PrevLogIdx].Term) {
 		resp.Success = false
 		return &resp, nil
 	}
@@ -344,6 +353,7 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 	resp.Success = true
 
 	prevLogIdx := int(req.PrevLogIdx)
+	c.mu.Lock()
 	for i, entry := range req.Entries {
 		idx := prevLogIdx + i + 1
 		if idx >= len(c.log) {
@@ -356,6 +366,7 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 	if req.LeaderCommitIdx > int32(c.commitIndex) {
 		c.commitIndex = int(min(req.LeaderCommitIdx, int32(len(c.log)-1)))
 	}
+	c.mu.Unlock()
 	c.electionReset = time.Now()
 	return &resp, nil
 }
