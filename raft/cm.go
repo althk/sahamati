@@ -317,7 +317,7 @@ func (c *ConsensusModule) HandleVoteRequest(_ context.Context, req *pb.RequestVo
 		c.becomeFollower(int(req.Term))
 	}
 
-	// election safety (section 5.4.1)
+	// election safety (section 3.6.1)
 	if int32(lastLogTerm) > req.LastLogTerm ||
 		(int32(lastLogTerm) == req.LastLogTerm && int32(lastLogIdx) > req.LastLogIdx) {
 		resp.VoteGranted = false
@@ -418,15 +418,16 @@ func (c *ConsensusModule) advanceCommitIndex() {
 	defer c.mu.RUnlock()
 	commitIdx := c.commitIndex
 	for i := c.commitIndex + 1; i < len(c.log); i++ {
-		count := 1
-		for _, peer := range c.peers {
-			if c.matchIndex[peer.ID] > i {
-				count++
+		if c.log[i].Term == int32(c.currentTerm) {
+			count := 1
+			for _, peer := range c.peers {
+				if c.matchIndex[peer.ID] > i {
+					count++
+				}
 			}
-		}
-
-		if count > len(c.peers)/2 {
-			c.commitIndex = i
+			if count > len(c.peers)/2 {
+				c.commitIndex = i
+			}
 		}
 	}
 	if commitIdx > c.commitIndex {
