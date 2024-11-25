@@ -37,6 +37,8 @@ const (
 	CMServiceRequestVoteProcedure = "/proto.v1.CMService/RequestVote"
 	// CMServiceAppendEntriesProcedure is the fully-qualified name of the CMService's AppendEntries RPC.
 	CMServiceAppendEntriesProcedure = "/proto.v1.CMService/AppendEntries"
+	// CMServiceAddMemberProcedure is the fully-qualified name of the CMService's AddMember RPC.
+	CMServiceAddMemberProcedure = "/proto.v1.CMService/AddMember"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -44,12 +46,14 @@ var (
 	cMServiceServiceDescriptor             = v1.File_proto_v1_cm_proto.Services().ByName("CMService")
 	cMServiceRequestVoteMethodDescriptor   = cMServiceServiceDescriptor.Methods().ByName("RequestVote")
 	cMServiceAppendEntriesMethodDescriptor = cMServiceServiceDescriptor.Methods().ByName("AppendEntries")
+	cMServiceAddMemberMethodDescriptor     = cMServiceServiceDescriptor.Methods().ByName("AddMember")
 )
 
 // CMServiceClient is a client for the proto.v1.CMService service.
 type CMServiceClient interface {
 	RequestVote(context.Context, *connect.Request[v1.RequestVoteRequest]) (*connect.Response[v1.RequestVoteResponse], error)
 	AppendEntries(context.Context, *connect.Request[v1.AppendEntriesRequest]) (*connect.Response[v1.AppendEntriesResponse], error)
+	AddMember(context.Context, *connect.Request[v1.AddMemberRequest]) (*connect.Response[v1.AddMemberResponse], error)
 }
 
 // NewCMServiceClient constructs a client for the proto.v1.CMService service. By default, it uses
@@ -74,6 +78,12 @@ func NewCMServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...c
 			connect.WithSchema(cMServiceAppendEntriesMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		addMember: connect.NewClient[v1.AddMemberRequest, v1.AddMemberResponse](
+			httpClient,
+			baseURL+CMServiceAddMemberProcedure,
+			connect.WithSchema(cMServiceAddMemberMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -81,6 +91,7 @@ func NewCMServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...c
 type cMServiceClient struct {
 	requestVote   *connect.Client[v1.RequestVoteRequest, v1.RequestVoteResponse]
 	appendEntries *connect.Client[v1.AppendEntriesRequest, v1.AppendEntriesResponse]
+	addMember     *connect.Client[v1.AddMemberRequest, v1.AddMemberResponse]
 }
 
 // RequestVote calls proto.v1.CMService.RequestVote.
@@ -93,10 +104,16 @@ func (c *cMServiceClient) AppendEntries(ctx context.Context, req *connect.Reques
 	return c.appendEntries.CallUnary(ctx, req)
 }
 
+// AddMember calls proto.v1.CMService.AddMember.
+func (c *cMServiceClient) AddMember(ctx context.Context, req *connect.Request[v1.AddMemberRequest]) (*connect.Response[v1.AddMemberResponse], error) {
+	return c.addMember.CallUnary(ctx, req)
+}
+
 // CMServiceHandler is an implementation of the proto.v1.CMService service.
 type CMServiceHandler interface {
 	RequestVote(context.Context, *connect.Request[v1.RequestVoteRequest]) (*connect.Response[v1.RequestVoteResponse], error)
 	AppendEntries(context.Context, *connect.Request[v1.AppendEntriesRequest]) (*connect.Response[v1.AppendEntriesResponse], error)
+	AddMember(context.Context, *connect.Request[v1.AddMemberRequest]) (*connect.Response[v1.AddMemberResponse], error)
 }
 
 // NewCMServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -117,12 +134,20 @@ func NewCMServiceHandler(svc CMServiceHandler, opts ...connect.HandlerOption) (s
 		connect.WithSchema(cMServiceAppendEntriesMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	cMServiceAddMemberHandler := connect.NewUnaryHandler(
+		CMServiceAddMemberProcedure,
+		svc.AddMember,
+		connect.WithSchema(cMServiceAddMemberMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/proto.v1.CMService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CMServiceRequestVoteProcedure:
 			cMServiceRequestVoteHandler.ServeHTTP(w, r)
 		case CMServiceAppendEntriesProcedure:
 			cMServiceAppendEntriesHandler.ServeHTTP(w, r)
+		case CMServiceAddMemberProcedure:
+			cMServiceAddMemberHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -138,4 +163,8 @@ func (UnimplementedCMServiceHandler) RequestVote(context.Context, *connect.Reque
 
 func (UnimplementedCMServiceHandler) AppendEntries(context.Context, *connect.Request[v1.AppendEntriesRequest]) (*connect.Response[v1.AppendEntriesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("proto.v1.CMService.AppendEntries is not implemented"))
+}
+
+func (UnimplementedCMServiceHandler) AddMember(context.Context, *connect.Request[v1.AddMemberRequest]) (*connect.Response[v1.AddMemberResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("proto.v1.CMService.AddMember is not implemented"))
 }

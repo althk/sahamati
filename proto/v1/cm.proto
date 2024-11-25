@@ -41,7 +41,18 @@ message AppendEntriesResponse {
   bool success = 2;
 }
 
+message AddMemberRequest {
+  int32 node_id = 1;
+  string addr = 2; // host:port
+}
+
+message AddMemberResponse {
+  bool status = 1;
+  string leader_hint = 2; // address of leader
+}
+
 service CMService {
   rpc RequestVote(RequestVoteRequest) returns (RequestVoteResponse) {}
   rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse) {}
+  rpc AddMember(AddMemberRequest) returns (AddMemberResponse) {}
 }
