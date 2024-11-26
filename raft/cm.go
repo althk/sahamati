@@ -401,7 +401,7 @@ func (c *ConsensusModule) processAppendEntriesResponse(req *pb.AppendEntriesRequ
 	c.mu.Unlock()
 }
 
-func (c *ConsensusModule) HandleVoteRequest(ctx context.Context, req *pb.RequestVoteRequest) (*pb.RequestVoteResponse, error) {
+func (c *ConsensusModule) HandleVoteRequest(_ context.Context, req *pb.RequestVoteRequest) (*pb.RequestVoteResponse, error) {
 	c.logger.Debug("Received vote request", slog.String("term", fmt.Sprintf("%v", req.Term)))
 	resp := pb.RequestVoteResponse{}
 	c.mu.Lock()
