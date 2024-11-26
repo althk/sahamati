@@ -22,8 +22,11 @@ const (
 )
 
 var (
-	ErrNodeNotLeader = errors.New("raft node not leader")
-	ErrDuplicateNode = errors.New("duplicate node id or address")
+	ErrNodeNotLeader              = errors.New("raft node not leader")
+	ErrDuplicateNode              = errors.New("duplicate node id or address")
+	ErrNodeNotFound               = errors.New("node not found in cluster")
+	ErrCannotRemove               = errors.New("cannot remove node; cluster is at min size (3)")
+	ErrMembershipChangeInProgress = errors.New("another membership change in progress, retry later")
 )
 
 type Peer struct {
@@ -77,12 +80,14 @@ type ConsensusModule struct {
 	cfgCommitCh chan map[int]Peer // used to notify internally for add/remove node rpc
 	applyCB     commitApplier
 
-	mu          sync.RWMutex
-	peerMu      map[int]*sync.Mutex
-	logger      *slog.Logger
-	store       persistence
-	leaderID    int
-	joinCluster bool
+	mu             sync.RWMutex
+	peerMu         map[int]*sync.Mutex
+	logger         *slog.Logger
+	store          persistence
+	leaderID       int
+	joinCluster    bool
+	removingMember bool
+	addingMember   bool
 }
 
 func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger,
@@ -578,11 +583,20 @@ func (c *ConsensusModule) persistState() error {
 
 func (c *ConsensusModule) AddMember(ctx context.Context, req *pb.AddMemberRequest) (*pb.AddMemberResponse, error) {
 	resp := &pb.AddMemberResponse{}
+
+	if c.isMembershipChangeInProgress() {
+		resp.Status = false
+		return resp, ErrMembershipChangeInProgress
+	}
 	c.logger.Info(
 		"AddMember RPC",
 		slog.String("req", fmt.Sprintf("%v", req)),
 	)
 	c.mu.Lock()
+
+	c.addingMember = true
+	defer func() { c.addingMember = false }()
+
 	if c.state != Leader {
 		resp.Status = false
 		resp.LeaderHint = c.peers[c.leaderID].Addr
@@ -632,6 +646,79 @@ func (c *ConsensusModule) AddMember(ctx context.Context, req *pb.AddMemberReques
 		}
 	}
 	return resp, nil
+}
+
+func (c *ConsensusModule) RemoveMember(ctx context.Context, req *pb.RemoveMemberRequest) (*pb.RemoveMemberResponse, error) {
+	resp := &pb.RemoveMemberResponse{}
+
+	if c.isMembershipChangeInProgress() {
+		resp.Status = false
+		return resp, ErrMembershipChangeInProgress
+	}
+
+	c.mu.Lock()
+
+	c.removingMember = true
+	defer func() { c.removingMember = false }()
+
+	c.logger.Info("RemoveMember RPC",
+		slog.String("req", fmt.Sprintf("%v", req)))
+
+	if c.state != Leader {
+		resp.Status = false
+		resp.LeaderHint = c.peers[c.leaderID].Addr
+		c.mu.Unlock()
+		return resp, ErrNodeNotLeader
+	}
+
+	if len(c.peers) == 3 {
+		resp.Status = false
+		c.mu.Unlock()
+		return resp, ErrCannotRemove
+	}
+
+	cmdPeers := make(map[int]Peer)
+	found := false
+	for _, peer := range c.peers {
+		if int32(peer.ID) == req.NodeId && peer.Addr == req.Addr {
+			found = true
+			continue
+		}
+		cmdPeers[peer.ID] = Peer{ID: peer.ID, Addr: peer.Addr}
+	}
+	if !found {
+		resp.Status = false
+		c.mu.Unlock()
+		return resp, ErrNodeNotFound
+	}
+
+	cmd, err := json.Marshal(cmdPeers)
+	if err != nil {
+		resp.Status = false
+		c.mu.Unlock()
+		return resp, err
+	}
+	c.mu.Unlock()
+	idx := c.Propose(cmd)
+
+	c.logger.Info("RemoveServer RPC proposed log index",
+		slog.String("node-id", fmt.Sprintf("%v", req.NodeId)),
+		slog.Int64("idx", idx),
+	)
+
+	select {
+	case <-ctx.Done():
+		return resp, ctx.Err()
+	case _ = <-c.cfgCommitCh:
+		delete(c.nextIndex, int(req.NodeId))
+		delete(c.matchIndex, int(req.NodeId))
+		resp.Status = true
+	}
+	return resp, nil
+}
+
+func (c *ConsensusModule) isMembershipChangeInProgress() bool {
+	return c.removingMember || c.addingMember
 }
 
 func electionTimeout() time.Duration {

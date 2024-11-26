@@ -24,6 +24,7 @@ type consensusModule interface {
 	HandleVoteRequest(context.Context, *cmv1.RequestVoteRequest) (*cmv1.RequestVoteResponse, error)
 	HandleAppendEntriesRequest(context.Context, *cmv1.AppendEntriesRequest) (*cmv1.AppendEntriesResponse, error)
 	AddMember(context.Context, *cmv1.AddMemberRequest) (*cmv1.AddMemberResponse, error)
+	RemoveMember(context.Context, *cmv1.RemoveMemberRequest) (*cmv1.RemoveMemberResponse, error)
 }
 
 func NewCMServer(cm consensusModule) *CMServer {
@@ -55,6 +56,14 @@ func (c *CMServer) AddMember(ctx context.Context, c2 *connect.Request[cmv1.AddMe
 		return nil, err
 	}
 	return connect.NewResponse[cmv1.AddMemberResponse](resp), nil
+}
+
+func (c *CMServer) RemoveMember(ctx context.Context, c2 *connect.Request[cmv1.RemoveMemberRequest]) (*connect.Response[cmv1.RemoveMemberResponse], error) {
+	resp, err := c.cm.RemoveMember(ctx, c2.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse[cmv1.RemoveMemberResponse](resp), nil
 }
 
 func LocalhostTLSConfig() *tls.Config {
