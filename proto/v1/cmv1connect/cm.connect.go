@@ -39,6 +39,8 @@ const (
 	CMServiceAppendEntriesProcedure = "/proto.v1.CMService/AppendEntries"
 	// CMServiceAddMemberProcedure is the fully-qualified name of the CMService's AddMember RPC.
 	CMServiceAddMemberProcedure = "/proto.v1.CMService/AddMember"
+	// CMServiceRemoveMemberProcedure is the fully-qualified name of the CMService's RemoveMember RPC.
+	CMServiceRemoveMemberProcedure = "/proto.v1.CMService/RemoveMember"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -47,6 +49,7 @@ var (
 	cMServiceRequestVoteMethodDescriptor   = cMServiceServiceDescriptor.Methods().ByName("RequestVote")
 	cMServiceAppendEntriesMethodDescriptor = cMServiceServiceDescriptor.Methods().ByName("AppendEntries")
 	cMServiceAddMemberMethodDescriptor     = cMServiceServiceDescriptor.Methods().ByName("AddMember")
+	cMServiceRemoveMemberMethodDescriptor  = cMServiceServiceDescriptor.Methods().ByName("RemoveMember")
 )
 
 // CMServiceClient is a client for the proto.v1.CMService service.
@@ -54,6 +57,7 @@ type CMServiceClient interface {
 	RequestVote(context.Context, *connect.Request[v1.RequestVoteRequest]) (*connect.Response[v1.RequestVoteResponse], error)
 	AppendEntries(context.Context, *connect.Request[v1.AppendEntriesRequest]) (*connect.Response[v1.AppendEntriesResponse], error)
 	AddMember(context.Context, *connect.Request[v1.AddMemberRequest]) (*connect.Response[v1.AddMemberResponse], error)
+	RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error)
 }
 
 // NewCMServiceClient constructs a client for the proto.v1.CMService service. By default, it uses
@@ -84,6 +88,12 @@ func NewCMServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...c
 			connect.WithSchema(cMServiceAddMemberMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		removeMember: connect.NewClient[v1.RemoveMemberRequest, v1.RemoveMemberResponse](
+			httpClient,
+			baseURL+CMServiceRemoveMemberProcedure,
+			connect.WithSchema(cMServiceRemoveMemberMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -92,6 +102,7 @@ type cMServiceClient struct {
 	requestVote   *connect.Client[v1.RequestVoteRequest, v1.RequestVoteResponse]
 	appendEntries *connect.Client[v1.AppendEntriesRequest, v1.AppendEntriesResponse]
 	addMember     *connect.Client[v1.AddMemberRequest, v1.AddMemberResponse]
+	removeMember  *connect.Client[v1.RemoveMemberRequest, v1.RemoveMemberResponse]
 }
 
 // RequestVote calls proto.v1.CMService.RequestVote.
@@ -109,11 +120,17 @@ func (c *cMServiceClient) AddMember(ctx context.Context, req *connect.Request[v1
 	return c.addMember.CallUnary(ctx, req)
 }
 
+// RemoveMember calls proto.v1.CMService.RemoveMember.
+func (c *cMServiceClient) RemoveMember(ctx context.Context, req *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error) {
+	return c.removeMember.CallUnary(ctx, req)
+}
+
 // CMServiceHandler is an implementation of the proto.v1.CMService service.
 type CMServiceHandler interface {
 	RequestVote(context.Context, *connect.Request[v1.RequestVoteRequest]) (*connect.Response[v1.RequestVoteResponse], error)
 	AppendEntries(context.Context, *connect.Request[v1.AppendEntriesRequest]) (*connect.Response[v1.AppendEntriesResponse], error)
 	AddMember(context.Context, *connect.Request[v1.AddMemberRequest]) (*connect.Response[v1.AddMemberResponse], error)
+	RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error)
 }
 
 // NewCMServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -140,6 +157,12 @@ func NewCMServiceHandler(svc CMServiceHandler, opts ...connect.HandlerOption) (s
 		connect.WithSchema(cMServiceAddMemberMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	cMServiceRemoveMemberHandler := connect.NewUnaryHandler(
+		CMServiceRemoveMemberProcedure,
+		svc.RemoveMember,
+		connect.WithSchema(cMServiceRemoveMemberMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/proto.v1.CMService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CMServiceRequestVoteProcedure:
@@ -148,6 +171,8 @@ func NewCMServiceHandler(svc CMServiceHandler, opts ...connect.HandlerOption) (s
 			cMServiceAppendEntriesHandler.ServeHTTP(w, r)
 		case CMServiceAddMemberProcedure:
 			cMServiceAddMemberHandler.ServeHTTP(w, r)
+		case CMServiceRemoveMemberProcedure:
+			cMServiceRemoveMemberHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -167,4 +192,8 @@ func (UnimplementedCMServiceHandler) AppendEntries(context.Context, *connect.Req
 
 func (UnimplementedCMServiceHandler) AddMember(context.Context, *connect.Request[v1.AddMemberRequest]) (*connect.Response[v1.AddMemberResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("proto.v1.CMService.AddMember is not implemented"))
+}
+
+func (UnimplementedCMServiceHandler) RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("proto.v1.CMService.RemoveMember is not implemented"))
 }
