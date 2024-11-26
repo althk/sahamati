@@ -35,7 +35,7 @@ func main() {
 		if peerAddr == *addr {
 			raftID = i + 1
 		}
-		peers[i] = raft.Peer{
+		peers[i+1] = raft.Peer{
 			ID:     i + 1,
 			Addr:   peerAddr,
 			Client: network.NewCMClient(peerAddr, false),

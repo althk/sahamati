@@ -14,20 +14,33 @@ import (
 )
 
 type State int
+type ConfigChangeType int
 
 const (
 	Follower State = iota
 	Candidate
 	Leader
+	Dead
+)
+
+const (
+	AddMember ConfigChangeType = iota
+	RemoveMember
 )
 
 var (
 	ErrNodeNotLeader              = errors.New("raft node not leader")
-	ErrDuplicateNode              = errors.New("duplicate node id or address")
+	ErrDuplicateNode              = errors.New("duplicate node ID or address")
 	ErrNodeNotFound               = errors.New("node not found in cluster")
 	ErrCannotRemove               = errors.New("cannot remove node; cluster is at min size (3)")
 	ErrMembershipChangeInProgress = errors.New("another membership change in progress, retry later")
 )
+
+type configChange struct {
+	Type ConfigChangeType
+	ID   int
+	Addr string
+}
 
 type Peer struct {
 	ID     int
@@ -77,11 +90,13 @@ type ConsensusModule struct {
 	matchIndex  map[int]int
 
 	aeReadyCh   chan bool
-	cfgCommitCh chan map[int]Peer // used to notify internally for add/remove node rpc
+	cfgCommitCh chan configChange // used to notify internally for add/remove node rpc
+	doneCh      chan bool
 	applyCB     commitApplier
 
 	mu             sync.RWMutex
 	peerMu         map[int]*sync.Mutex
+	once           sync.Once
 	logger         *slog.Logger
 	store          persistence
 	leaderID       int
@@ -101,7 +116,8 @@ func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger,
 		peers:       peers,
 		logger:      logger,
 		aeReadyCh:   make(chan bool),
-		cfgCommitCh: make(chan map[int]Peer),
+		cfgCommitCh: make(chan configChange),
+		doneCh:      make(chan bool),
 		applyCB:     applyCB,
 		nextIndex:   make(map[int]int),
 		matchIndex:  make(map[int]int),
@@ -138,25 +154,32 @@ func (c *ConsensusModule) runElectionTimer() {
 	termStarted := c.currentTerm
 	c.mu.Unlock()
 	for {
-		<-t.C
-		c.mu.Lock()
-		if c.state == Leader {
+		select {
+		case _, ok := <-c.doneCh:
+			if !ok {
+				t.Stop()
+				return
+			}
+		case <-t.C:
+			c.mu.Lock()
+			if c.state == Leader {
+				c.mu.Unlock()
+				t.Stop()
+				return
+			}
+			if c.currentTerm != termStarted {
+				c.mu.Unlock()
+				t.Stop()
+				return
+			}
+			if elapsed := time.Since(c.electionReset); elapsed >= c.electionTimeout {
+				c.mu.Unlock()
+				t.Stop()
+				c.startElection()
+				return
+			}
 			c.mu.Unlock()
-			t.Stop()
-			return
 		}
-		if c.currentTerm != termStarted {
-			c.mu.Unlock()
-			t.Stop()
-			return
-		}
-		if elapsed := time.Since(c.electionReset); elapsed >= c.electionTimeout {
-			c.mu.Unlock()
-			t.Stop()
-			c.startElection()
-			return
-		}
-		c.mu.Unlock()
 	}
 }
 
@@ -249,7 +272,7 @@ func (c *ConsensusModule) processVoteResponse(electionTerm int, resp *pb.Request
 func (c *ConsensusModule) becomeLeader() {
 	c.mu.Lock()
 	c.logger.Info("Becoming leader",
-		slog.String("id", fmt.Sprint(c.id)))
+		slog.String("ID", fmt.Sprint(c.id)))
 	if c.state == Leader {
 		c.mu.Unlock()
 		return
@@ -276,6 +299,10 @@ func (c *ConsensusModule) sendHeartbeatsAndAEs() {
 
 	for {
 		select {
+		case _, ok := <-c.doneCh:
+			if !ok {
+				return
+			}
 		case _, ok := <-c.heartbeatTicker.C:
 			if !ok {
 				return
@@ -308,8 +335,10 @@ func (c *ConsensusModule) sendAppendEntries(heartbeat bool) {
 }
 
 func (c *ConsensusModule) sendAppendEntriesToPeer(peer Peer, savedTerm int, heartbeat bool) {
-	c.getPeerMutex(peer.ID).Lock()
-	defer c.getPeerMutex(peer.ID).Unlock()
+	if !heartbeat {
+		c.getPeerMutex(peer.ID).Lock()
+		defer c.getPeerMutex(peer.ID).Unlock()
+	}
 	client := getRPCClient(peer)
 	c.mu.Lock()
 	prevLogIdx := -1
@@ -372,7 +401,7 @@ func (c *ConsensusModule) processAppendEntriesResponse(req *pb.AppendEntriesRequ
 	c.mu.Unlock()
 }
 
-func (c *ConsensusModule) HandleVoteRequest(_ context.Context, req *pb.RequestVoteRequest) (*pb.RequestVoteResponse, error) {
+func (c *ConsensusModule) HandleVoteRequest(ctx context.Context, req *pb.RequestVoteRequest) (*pb.RequestVoteResponse, error) {
 	c.logger.Debug("Received vote request", slog.String("term", fmt.Sprintf("%v", req.Term)))
 	resp := pb.RequestVoteResponse{}
 	c.mu.Lock()
@@ -380,6 +409,9 @@ func (c *ConsensusModule) HandleVoteRequest(_ context.Context, req *pb.RequestVo
 	lastLogIdx, lastLogTerm := c.lastLogIndexAndTerm()
 	c.mu.Unlock()
 	resp.VoteGranted = false
+	if _, ok := c.peers[int(req.CandidateId)]; !ok {
+		return &resp, fmt.Errorf("candidate (ID: %v) not part of cluster ", req.CandidateId)
+	}
 
 	if req.Term > resp.Term {
 		c.becomeFollower(int(req.Term))
@@ -410,6 +442,8 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 
 	c.mu.Lock()
 	resp.Term = int32(c.currentTerm)
+	c.electionReset = time.Now()
+
 	c.mu.Unlock()
 	if req.Term > resp.Term {
 		c.becomeFollower(int(req.Term))
@@ -435,7 +469,6 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 		// heartbeat
 		c.mu.Lock()
 		c.leaderID = int(req.LeaderId)
-		c.electionReset = time.Now()
 		c.mu.Unlock()
 		return &resp, nil
 	}
@@ -454,6 +487,10 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 			c.log = c.log[:idx]
 			c.log = append(c.log, entry)
 		}
+		var cfg configChange
+		if err := json.Unmarshal(entry.Command, &cfg); err == nil {
+			c.applyConfigChange(cfg)
+		}
 	}
 	mustApply := false
 	if req.LeaderCommitIdx > int32(c.commitIndex) {
@@ -461,7 +498,6 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 		mustApply = true
 	}
 	c.leaderID = int(req.LeaderId)
-	c.electionReset = time.Now()
 	c.mu.Unlock()
 	if mustApply {
 		c.applyCommits()
@@ -472,16 +508,23 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 func (c *ConsensusModule) logState() {
 	t := time.NewTicker(8 * time.Second)
 	for {
-		<-t.C
-		c.mu.Lock()
-		c.logger.Info("CM Status",
-			slog.String("currentTerm", fmt.Sprintf("%v", c.currentTerm)),
-			slog.String("votedFor", fmt.Sprintf("%v", c.votedFor)),
-			slog.String("state", fmt.Sprintf("%v", c.state)),
-			slog.String("raft-id", fmt.Sprintf("%v", c.id)),
-			slog.String("leader-id", fmt.Sprintf("%v", c.leaderID)),
-		)
-		c.mu.Unlock()
+		select {
+		case _, ok := <-c.doneCh:
+			if !ok {
+				t.Stop()
+				return
+			}
+		case <-t.C:
+			c.mu.Lock()
+			c.logger.Info("CM Status",
+				slog.String("currentTerm", fmt.Sprintf("%v", c.currentTerm)),
+				slog.String("votedFor", fmt.Sprintf("%v", c.votedFor)),
+				slog.String("state", fmt.Sprintf("%v", c.state)),
+				slog.String("raft-id", fmt.Sprintf("%v", c.id)),
+				slog.String("leader-id", fmt.Sprintf("%v", c.leaderID)),
+			)
+			c.mu.Unlock()
+		}
 	}
 }
 
@@ -543,10 +586,10 @@ func (c *ConsensusModule) applyCommits() {
 	for c.lastApplied < c.commitIndex {
 		c.lastApplied++
 		entry := c.log[c.lastApplied]
-		var cfg map[int]Peer
+		var cfg configChange
 		if err := json.Unmarshal(entry.Command, &cfg); err == nil {
-			c.peers = cfg
 			if entry.Term == int32(c.currentTerm) && c.state == Leader {
+				c.applyConfigChange(cfg)
 				c.cfgCommitCh <- cfg
 			}
 		} else {
@@ -556,6 +599,26 @@ func (c *ConsensusModule) applyCommits() {
 	c.mu.Unlock()
 
 	c.applyCB(entries)
+}
+
+func (c *ConsensusModule) applyConfigChange(cfg configChange) {
+	switch cfg.Type {
+	case AddMember:
+		c.peers[cfg.ID] = Peer{ID: cfg.ID, Addr: cfg.Addr}
+	case RemoveMember:
+		delete(c.peers, cfg.ID)
+		if cfg.ID == c.id {
+			c.Shutdown()
+		}
+	}
+}
+
+func (c *ConsensusModule) Shutdown() {
+	c.state = Dead
+	c.once.Do(func() {
+		close(c.doneCh)
+		close(c.aeReadyCh)
+	})
 }
 
 func (c *ConsensusModule) loadFromStore() {
@@ -612,16 +675,13 @@ func (c *ConsensusModule) AddMember(ctx context.Context, req *pb.AddMemberReques
 		}
 	}
 
-	cmdPeers := make(map[int]Peer)
-	for _, peer := range c.peers {
-		cmdPeers[peer.ID] = Peer{ID: peer.ID, Addr: peer.Addr}
-	}
-	cmdPeers[int(req.NodeId)] = Peer{
+	cfg := configChange{
+		Type: AddMember,
 		ID:   int(req.NodeId),
 		Addr: req.Addr,
 	}
 
-	cmd, err := json.Marshal(cmdPeers)
+	cmd, err := json.Marshal(cfg)
 	if err != nil {
 		resp.Status = false
 		c.mu.Unlock()
@@ -632,7 +692,7 @@ func (c *ConsensusModule) AddMember(ctx context.Context, req *pb.AddMemberReques
 	c.matchIndex[int(req.NodeId)] = -1
 	c.mu.Unlock()
 	idx := c.Propose(cmd)
-	c.logger.Info("AddServer RPC proposed log index",
+	c.logger.Info("AddMember RPC proposed log index",
 		slog.String("req", fmt.Sprintf("%v", req)),
 		slog.Int64("idx", idx),
 	)
@@ -641,7 +701,7 @@ func (c *ConsensusModule) AddMember(ctx context.Context, req *pb.AddMemberReques
 	case <-ctx.Done():
 		return resp, ctx.Err()
 	case cfg := <-c.cfgCommitCh:
-		if _, ok := cfg[int(req.NodeId)]; ok {
+		if cfg.ID == int(req.NodeId) {
 			resp.Status = true
 		}
 	}
@@ -677,22 +737,24 @@ func (c *ConsensusModule) RemoveMember(ctx context.Context, req *pb.RemoveMember
 		return resp, ErrCannotRemove
 	}
 
-	cmdPeers := make(map[int]Peer)
 	found := false
 	for _, peer := range c.peers {
 		if int32(peer.ID) == req.NodeId && peer.Addr == req.Addr {
 			found = true
-			continue
+			break
 		}
-		cmdPeers[peer.ID] = Peer{ID: peer.ID, Addr: peer.Addr}
 	}
 	if !found {
 		resp.Status = false
 		c.mu.Unlock()
 		return resp, ErrNodeNotFound
 	}
-
-	cmd, err := json.Marshal(cmdPeers)
+	cfg := configChange{
+		Type: RemoveMember,
+		ID:   int(req.NodeId),
+		Addr: req.Addr,
+	}
+	cmd, err := json.Marshal(cfg)
 	if err != nil {
 		resp.Status = false
 		c.mu.Unlock()
@@ -701,7 +763,7 @@ func (c *ConsensusModule) RemoveMember(ctx context.Context, req *pb.RemoveMember
 	c.mu.Unlock()
 	idx := c.Propose(cmd)
 
-	c.logger.Info("RemoveServer RPC proposed log index",
+	c.logger.Info("RemoveMember RPC proposed log index",
 		slog.String("node-id", fmt.Sprintf("%v", req.NodeId)),
 		slog.Int64("idx", idx),
 	)
@@ -709,10 +771,12 @@ func (c *ConsensusModule) RemoveMember(ctx context.Context, req *pb.RemoveMember
 	select {
 	case <-ctx.Done():
 		return resp, ctx.Err()
-	case _ = <-c.cfgCommitCh:
-		delete(c.nextIndex, int(req.NodeId))
-		delete(c.matchIndex, int(req.NodeId))
-		resp.Status = true
+	case cfg := <-c.cfgCommitCh:
+		if cfg.ID == int(req.NodeId) {
+			delete(c.nextIndex, int(req.NodeId))
+			delete(c.matchIndex, int(req.NodeId))
+			resp.Status = true
+		}
 	}
 	return resp, nil
 }
