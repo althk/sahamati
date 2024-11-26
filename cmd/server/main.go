@@ -19,7 +19,8 @@ var (
 	addr     = flag.String("addr", ":6001", "raft node address")
 	allNodes = flag.String("nodes", "", `comma separated list of all nodes in this cluster, 
 including the current host, in the form 'host1:port1,host2:port2'`)
-	h2c = flag.Bool("no-tls", false, "whether to use HTTP2 WITHOUT TLS (via h2c)")
+	h2c  = flag.Bool("no-tls", false, "whether to use HTTP2 WITHOUT TLS (via h2c)")
+	join = flag.Bool("join", false, "join an already running cluster (skip election)")
 )
 
 func main() {
@@ -33,7 +34,6 @@ func main() {
 	for i, peerAddr := range strings.Split(*allNodes, ",") {
 		if peerAddr == *addr {
 			raftID = i + 1
-			continue
 		}
 		peers[i] = raft.Peer{
 			ID:     i + 1,
@@ -46,7 +46,7 @@ func main() {
 	store := persistence.NewMemStore()
 
 	cm := raft.NewConsensusModule(
-		raftID, peers, logger, store, dummyCommitApplier,
+		raftID, peers, logger, store, dummyCommitApplier, *join,
 	)
 
 	httpServer := network.NewHTTPServer(*addr, cm, *h2c, logger)

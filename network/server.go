@@ -23,6 +23,7 @@ type consensusModule interface {
 	Init()
 	HandleVoteRequest(context.Context, *cmv1.RequestVoteRequest) (*cmv1.RequestVoteResponse, error)
 	HandleAppendEntriesRequest(context.Context, *cmv1.AppendEntriesRequest) (*cmv1.AppendEntriesResponse, error)
+	AddMember(context.Context, *cmv1.AddMemberRequest) (*cmv1.AddMemberResponse, error)
 }
 
 func NewCMServer(cm consensusModule) *CMServer {
@@ -46,6 +47,14 @@ func (c *CMServer) AppendEntries(ctx context.Context, r *connect.Request[cmv1.Ap
 		return nil, err
 	}
 	return connect.NewResponse[cmv1.AppendEntriesResponse](resp), nil
+}
+
+func (c *CMServer) AddMember(ctx context.Context, c2 *connect.Request[cmv1.AddMemberRequest]) (*connect.Response[cmv1.AddMemberResponse], error) {
+	resp, err := c.cm.AddMember(ctx, c2.Msg)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse[cmv1.AddMemberResponse](resp), nil
 }
 
 func LocalhostTLSConfig() *tls.Config {
