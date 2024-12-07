@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"github.com/althk/sahamati/network"
 	pb "github.com/althk/sahamati/proto/v1"
+	"github.com/althk/wal"
+	"google.golang.org/protobuf/proto"
 	"log/slog"
 	"math/rand"
 	"sync"
@@ -99,6 +101,7 @@ type ConsensusModule struct {
 	once           sync.Once
 	logger         *slog.Logger
 	store          persistence
+	wal            *wal.WAL
 	leaderID       int
 	joinCluster    bool
 	removingMember bool
@@ -106,7 +109,7 @@ type ConsensusModule struct {
 }
 
 func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger,
-	store persistence, applyCB commitApplier, join bool) *ConsensusModule {
+	store persistence, wal *wal.WAL, applyCB commitApplier, join bool) *ConsensusModule {
 	return &ConsensusModule{
 		id:          id,
 		votedFor:    -1,
@@ -115,6 +118,7 @@ func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger,
 		currentTerm: 0,
 		peers:       peers,
 		logger:      logger,
+		wal:         wal,
 		aeReadyCh:   make(chan bool),
 		cfgCommitCh: make(chan configChange),
 		doneCh:      make(chan bool),
@@ -482,10 +486,18 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 	for i, entry := range req.Entries {
 		idx := prevLogIdx + i + 1
 		if idx >= len(c.log) {
-			c.log = append(c.log, entry)
+			if err := c.appendEntry(entry); err != nil {
+				c.mu.Unlock()
+				resp.Success = false
+				return &resp, err
+			}
 		} else if entry.Term != c.log[idx].Term {
 			c.log = c.log[:idx]
-			c.log = append(c.log, entry)
+			if err := c.appendEntry(entry); err != nil {
+				c.mu.Unlock()
+				resp.Success = false
+				return &resp, err
+			}
 		}
 		var cfg configChange
 		if err := json.Unmarshal(entry.Command, &cfg); err == nil {
@@ -538,10 +550,20 @@ func (c *ConsensusModule) Propose(cmd []byte) int64 {
 		c.mu.Unlock()
 		return -1
 	}
-	c.realIdx += 1
-	c.log = append(c.log, &pb.LogEntry{Term: int32(c.currentTerm), Command: cmd, RealIdx: c.realIdx})
-	err := c.persistState()
+	c.realIdx++
+	entry := &pb.LogEntry{
+		Command: cmd,
+		Term:    int32(c.currentTerm),
+		RealIdx: c.realIdx,
+	}
+	err := c.appendEntry(entry)
 	if err != nil {
+		c.mu.Unlock()
+		return -1
+	}
+	err = c.persistState()
+	if err != nil {
+		c.mu.Unlock()
 		return -1
 	}
 	c.mu.Unlock()
@@ -599,6 +621,19 @@ func (c *ConsensusModule) applyCommits() {
 	c.mu.Unlock()
 
 	c.applyCB(entries)
+}
+
+func (c *ConsensusModule) appendEntry(entry *pb.LogEntry) error {
+	b, err := proto.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	err = c.wal.Put(fmt.Sprintf("log:%d", c.realIdx), b)
+	if err != nil {
+		return err
+	}
+	c.log = append(c.log, entry)
+	return nil
 }
 
 func (c *ConsensusModule) applyConfigChange(cfg configChange) {

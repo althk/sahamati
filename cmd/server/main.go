@@ -8,6 +8,7 @@ import (
 	"github.com/althk/sahamati/persistence"
 	pb "github.com/althk/sahamati/proto/v1"
 	"github.com/althk/sahamati/raft"
+	"github.com/althk/wal"
 	"log/slog"
 	"net/http"
 	"os"
@@ -19,8 +20,9 @@ var (
 	addr     = flag.String("addr", ":6001", "raft node address")
 	allNodes = flag.String("nodes", "", `comma separated list of all nodes in this cluster, 
 including the current host, in the form 'host1:port1,host2:port2'`)
-	h2c  = flag.Bool("no-tls", false, "whether to use HTTP2 WITHOUT TLS (via h2c)")
-	join = flag.Bool("join", false, "join an already running cluster (skip election)")
+	h2c    = flag.Bool("notls", false, "whether to use HTTP2 WITHOUT TLS (via h2c)")
+	join   = flag.Bool("join", false, "join an already running cluster (skip election)")
+	walDir = flag.String("waldir", "/tmp", "directory for writing WAL files")
 )
 
 func main() {
@@ -44,9 +46,12 @@ func main() {
 
 	dummyCommitApplier := func(entries []*pb.LogEntry) {}
 	store := persistence.NewMemStore()
-
+	w, err := wal.New(*walDir)
+	if err != nil {
+		panic(err)
+	}
 	cm := raft.NewConsensusModule(
-		raftID, peers, logger, store, dummyCommitApplier, *join,
+		raftID, peers, logger, store, w, dummyCommitApplier, *join,
 	)
 
 	httpServer := network.NewHTTPServer(*addr, cm, *h2c, logger)
@@ -60,7 +65,7 @@ func main() {
 		_ = httpServer.Shutdown(ctx)
 	}(ctx)
 
-	err := httpServer.ListenAndServeTLS("", "")
+	err = httpServer.ListenAndServeTLS("", "")
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		panic(err)
 	}
