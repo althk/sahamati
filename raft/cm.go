@@ -558,6 +558,7 @@ func (c *ConsensusModule) Propose(cmd []byte) int64 {
 	}
 	err := c.appendEntry(entry)
 	if err != nil {
+		c.realIdx--
 		c.mu.Unlock()
 		return -1
 	}
