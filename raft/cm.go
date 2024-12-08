@@ -504,6 +504,7 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 			c.applyConfigChange(cfg)
 		}
 	}
+	c.realIdx = c.log[len(c.log)-1].RealIdx
 	mustApply := false
 	if req.LeaderCommitIdx > int32(c.commitIndex) {
 		c.commitIndex = int(min(req.LeaderCommitIdx, int32(len(c.log)-1)))
