@@ -1,10 +1,10 @@
 # Allows starting/stopping a raft cluster with dynamic size of nodes for dev env.
-# `make start SCALE=5` will start 5 nodes on localhost from ports 6001 to 6005
+# `make start CLUSTER_SIZE=5` will start 5 nodes on localhost from ports 6001 to 6005
 # `make stop` will send SIGINT to all nodes and allows them to shutdown gracefully.
 
-SCALE=3
+CLUSTER_SIZE=3
 BASE_PORT=6001
-LAST_PORT=$(shell expr $(BASE_PORT) + $(SCALE) - 1)
+LAST_PORT=$(shell expr $(BASE_PORT) + $(CLUSTER_SIZE) - 1)
 
 # Generate sequential port numbers (6001 6002...)
 PORTS=$(shell seq $(BASE_PORT) $(LAST_PORT))
@@ -16,7 +16,7 @@ CLUSTER="$(shell echo $(HOSTS) | tr ' ' ',')"
 .PHONY: start stop
 
 start:
-	@echo "starting $(SCALE) nodes"
+	@echo "starting $(CLUSTER_SIZE) nodes"
 	@echo "cluster = $(CLUSTER)"
 	@for i in $(HOSTS); do \
   		echo "starting node $$i"; \
