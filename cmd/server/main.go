@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"strings"
 )
 
@@ -46,11 +47,13 @@ func main() {
 
 	dummyCommitApplier := func(entries []*pb.LogEntry) {}
 	store := persistence.NewMemStore()
-	w, err := wal.New(*walDir)
+	walPath := path.Join(*walDir, strings.Replace(*addr, ":", "_", -1))
+	w, err := wal.New(walPath)
+	logger = logger.With(slog.Int("id", raftID))
 	if err != nil {
+		logger.Error("error initializing WAL", "err", err)
 		panic(err)
 	}
-	logger = logger.With(slog.Int("id", raftID))
 	cm := raft.NewConsensusModule(
 		raftID, peers, logger, store, w, dummyCommitApplier, *join,
 	)
