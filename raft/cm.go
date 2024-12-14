@@ -229,7 +229,7 @@ func (c *ConsensusModule) sendVoteRequest(peer Peer, term int, idx int, logTerm 
 	c.getPeerMutex(peer.ID).Lock()
 	defer c.getPeerMutex(peer.ID).Unlock()
 	client := getRPCClient(peer)
-	c.logger.Info("sending vote request", slog.String("peer", peer.Addr))
+	c.logger.Debug("sending vote request", slog.String("peer", peer.Addr))
 	c.mu.Lock()
 	if c.state != Candidate || term != c.currentTerm || c.id != c.votedFor {
 		c.mu.Unlock()
@@ -824,5 +824,6 @@ func (c *ConsensusModule) isMembershipChangeInProgress() bool {
 }
 
 func electionTimeout() time.Duration {
-	return time.Duration(150+rand.Intn(150)) * time.Millisecond
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	return time.Duration(150+rng.Intn(151)) * time.Millisecond
 }
