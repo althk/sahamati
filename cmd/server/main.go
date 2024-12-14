@@ -50,6 +50,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	logger = logger.With(slog.Int("id", raftID))
 	cm := raft.NewConsensusModule(
 		raftID, peers, logger, store, w, dummyCommitApplier, *join,
 	)
