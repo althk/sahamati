@@ -146,7 +146,7 @@ func (c *ConsensusModule) getPeerMutex(id int) *sync.Mutex {
 func (c *ConsensusModule) Init() {
 	c.loadFromStore()
 	if !c.joinCluster {
-		c.becomeFollower(0)
+		c.becomeFollower(c.currentTerm)
 	}
 	go c.logState()
 }
