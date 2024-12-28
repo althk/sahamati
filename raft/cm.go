@@ -431,6 +431,9 @@ func (c *ConsensusModule) HandleVoteRequest(_ context.Context, req *pb.RequestVo
 	c.mu.Lock()
 	if req.Term == resp.Term && (c.votedFor == -1 || c.votedFor == int(req.CandidateId) ||
 		(c.votedFor == c.id && c.id > int(req.CandidateId))) {
+		if c.votedFor == c.id {
+			c.votesReceived -= 1
+		}
 		c.votedFor = int(req.CandidateId)
 		resp.VoteGranted = true
 		c.state = Follower
