@@ -13,7 +13,11 @@ HOSTS=$(addprefix localhost:,${PORTS})
 # Generate a CSV for the cluster combining all hosts (localhost:6001,localhost:6002,...)
 CLUSTER="$(shell echo $(HOSTS) | tr ' ' ',')"
 
-.PHONY: start stop
+.PHONY: proto start stop
+
+proto:
+	@buf lint
+	@buf generate
 
 start:
 	@echo "starting $(CLUSTER_SIZE) nodes"
