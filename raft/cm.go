@@ -79,7 +79,7 @@ type ConsensusModule struct {
 	currentTerm int
 	votedFor    int
 	log         []*pb.LogEntry
-	realIdx     int64
+	realIdx     uint64
 
 	votesReceived   int
 	electionTimeout time.Duration
@@ -549,7 +549,7 @@ func (c *ConsensusModule) cmState() (id int, currentTerm int, votedFor int, stat
 	return c.id, c.currentTerm, c.votedFor, c.state
 }
 
-func (c *ConsensusModule) Propose(cmd []byte) int64 {
+func (c *ConsensusModule) Propose(cmd []byte) uint64 {
 	c.mu.Lock()
 	if c.state != Leader {
 		c.mu.Unlock()
@@ -735,7 +735,7 @@ func (c *ConsensusModule) AddMember(ctx context.Context, req *pb.AddMemberReques
 	idx := c.Propose(cmd)
 	c.logger.Info("AddMember RPC proposed log index",
 		slog.String("req", fmt.Sprintf("%v", req)),
-		slog.Int64("idx", idx),
+		slog.Uint64("idx", idx),
 	)
 
 	select {
@@ -806,7 +806,7 @@ func (c *ConsensusModule) RemoveMember(ctx context.Context, req *pb.RemoveMember
 
 	c.logger.Info("RemoveMember RPC proposed log index",
 		slog.String("node-id", fmt.Sprintf("%v", req.NodeId)),
-		slog.Int64("idx", idx),
+		slog.Uint64("idx", idx),
 	)
 
 	select {

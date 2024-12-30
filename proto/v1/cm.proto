@@ -6,7 +6,7 @@ option go_package = "github.com/althk/sahamati/proto/v1;cmv1";
 message LogEntry {
   int32 term = 1;
   bytes command = 2;
-  int64 real_idx = 3;
+  uint64 real_idx = 3;
 }
 
 message PersistentState {
