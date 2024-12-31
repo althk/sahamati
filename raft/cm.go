@@ -119,7 +119,7 @@ func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, snapper
 	return &ConsensusModule{
 		id:          id,
 		votedFor:    -1,
-		realIdx:     -1,
+		realIdx:     0,
 		log:         make([]*pb.LogEntry, 0),
 		currentTerm: 0,
 		peers:       peers,
@@ -132,8 +132,8 @@ func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, snapper
 		matchIndex:  make(map[int]uint64),
 		snapper:     snapper,
 		sm:          sm,
-		commitIndex: -1,
-		lastApplied: -1,
+		commitIndex: 0,
+		lastApplied: 0,
 		joinCluster: join,
 		peerMu:      make(map[int]*sync.Mutex),
 	}
@@ -240,7 +240,7 @@ func (c *ConsensusModule) startElection() {
 
 func (c *ConsensusModule) lastLogIndexAndTerm() (uint64, int) {
 	if len(c.log) == 0 {
-		return -1, -1
+		return 0, -1
 	}
 	return c.realIdx, int(c.log[len(c.log)-1].Term)
 }
@@ -309,7 +309,7 @@ func (c *ConsensusModule) becomeLeader() {
 			continue
 		}
 		c.nextIndex[peer.ID] = c.realIdx
-		c.matchIndex[peer.ID] = -1
+		c.matchIndex[peer.ID] = 0
 	}
 
 	c.aeReadyCh = make(chan bool)
@@ -365,14 +365,14 @@ func (c *ConsensusModule) sendAppendEntriesToPeer(peer Peer, savedTerm int, hear
 	}
 	client := getRPCClient(peer)
 	c.mu.Lock()
-	prevLogIdx := uint64(-1)
+	prevLogIdx := uint64(0)
 	prevLogTerm := -1
 	entries := make([]*pb.LogEntry, 0)
 
 	if !heartbeat {
 		ni := c.nextIndex[peer.ID]
 		prevLogIdx = ni - 1
-		if prevLogIdx >= 0 {
+		if prevLogIdx > 0 {
 			prevLogTerm = int(c.log[prevLogIdx].Term)
 		}
 		entries = c.log[ni:]
@@ -411,7 +411,7 @@ func (c *ConsensusModule) processAppendEntriesResponse(req *pb.AppendEntriesRequ
 
 		if len(req.Entries) > 0 {
 			c.nextIndex[peer.ID] += uint64(len(req.Entries))
-			c.matchIndex[peer.ID] = max(c.nextIndex[peer.ID]-1, -1)
+			c.matchIndex[peer.ID] = max(c.nextIndex[peer.ID]-1, 0)
 			c.logger.Info("AppendEntries completed, updating index",
 				slog.String("peer", peer.Addr),
 				slog.Uint64("nextIndex", c.nextIndex[peer.ID]),
@@ -485,7 +485,7 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 	c.state = Follower
 	c.mu.Unlock()
 
-	if req.PrevLogIdx >= 0 &&
+	if req.PrevLogIdx > 0 &&
 		(req.PrevLogIdx >= c.realIdx || req.PrevLogTerm != c.log[req.PrevLogIdx].Term) {
 		resp.Success = false
 		return &resp, nil
@@ -578,7 +578,7 @@ func (c *ConsensusModule) Propose(cmd []byte) uint64 {
 	c.mu.Lock()
 	if c.state != Leader {
 		c.mu.Unlock()
-		return -1
+		return 0
 	}
 	c.realIdx++
 	entry := &pb.LogEntry{
@@ -590,7 +590,7 @@ func (c *ConsensusModule) Propose(cmd []byte) uint64 {
 	if err != nil {
 		c.realIdx--
 		c.mu.Unlock()
-		return -1
+		return 0
 	}
 
 	c.mu.Unlock()
@@ -820,8 +820,8 @@ func (c *ConsensusModule) AddMember(ctx context.Context, req *pb.AddMemberReques
 		return resp, err
 	}
 
-	c.nextIndex[int(req.NodeId)] = 0
-	c.matchIndex[int(req.NodeId)] = -1
+	c.nextIndex[int(req.NodeId)] = 1
+	c.matchIndex[int(req.NodeId)] = 0
 	c.mu.Unlock()
 	idx := c.Propose(cmd)
 	c.logger.Info("AddMember RPC proposed log index",
