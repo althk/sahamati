@@ -64,6 +64,7 @@ type persistence interface {
 type snapshotter interface {
 	Load() (*pb.Snapshot, error)
 	Save(*pb.Snapshot) error
+	HasData() bool
 }
 
 type commitApplier func(entries []*pb.LogEntry)
@@ -106,6 +107,7 @@ type ConsensusModule struct {
 	once           sync.Once
 	logger         *slog.Logger
 	store          persistence
+	snapper        snapshotter
 	wal            *wal.WAL
 	leaderID       int
 	joinCluster    bool
@@ -113,8 +115,7 @@ type ConsensusModule struct {
 	addingMember   bool
 }
 
-func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger,
-	store persistence, wal *wal.WAL, applyCB commitApplier, join bool) *ConsensusModule {
+func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, store persistence, snapper snapshotter, wal *wal.WAL, applyCB commitApplier, join bool) *ConsensusModule {
 	return &ConsensusModule{
 		id:          id,
 		votedFor:    -1,
@@ -131,6 +132,7 @@ func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger,
 		nextIndex:   make(map[int]int),
 		matchIndex:  make(map[int]int),
 		store:       store,
+		snapper:     snapper,
 		commitIndex: -1,
 		lastApplied: -1,
 		joinCluster: join,
@@ -149,7 +151,9 @@ func (c *ConsensusModule) getPeerMutex(id int) *sync.Mutex {
 }
 
 func (c *ConsensusModule) Init() {
-	c.loadFromStore()
+	if c.snapper.HasData() {
+		c.loadFromSnapshot()
+	}
 	if !c.joinCluster {
 		c.becomeFollower(c.currentTerm)
 	}
@@ -718,6 +722,20 @@ func (c *ConsensusModule) loadFromStore() {
 	c.currentTerm = int(s.Term)
 	c.votedFor = int(s.VotedFor)
 	c.log = s.Log
+}
+
+func (c *ConsensusModule) loadFromSnapshot() {
+	if !c.snapper.HasData() {
+		return
+	}
+	s, err := c.snapper.Load()
+	if err != nil {
+		panic(err)
+		return
+	}
+	// c.sm.RestoreFromSnapshot(s.Data)
+	c.lastApplied = int(s.Metadata.Index)
+	c.commitIndex = int(s.Metadata.Index)
 }
 
 func (c *ConsensusModule) persistState() error {
