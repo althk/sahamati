@@ -57,7 +57,7 @@ type peerClient interface {
 
 type stateMachine interface {
 	ApplyEntries(entries []*pb.LogEntry) error
-	CreateSnapshot(snapshotIndex int64) ([]byte, error)
+	CreateSnapshot(snapshotIndex uint64) ([]byte, error)
 	RestoreFromSnapshot(data []byte) error
 }
 
@@ -90,10 +90,12 @@ type ConsensusModule struct {
 	electionReset   time.Time
 	heartbeatTicker *time.Ticker
 
-	commitIndex uint64
-	lastApplied uint64
-	nextIndex   map[int]uint64
-	matchIndex  map[int]uint64
+	commitIndex   uint64
+	lastApplied   uint64
+	snapshotIndex uint64
+	snapshotTerm  int
+	nextIndex     map[int]uint64
+	matchIndex    map[int]uint64
 
 	aeReadyCh   chan bool
 	cfgCommitCh chan configChange // used to notify internally for add/remove node rpc
@@ -739,6 +741,39 @@ func (c *ConsensusModule) loadFromSnapshot() {
 	}
 	c.lastApplied = s.Metadata.Index
 	c.commitIndex = s.Metadata.Index
+	c.snapshotIndex = s.Metadata.Index
+	c.snapshotTerm = int(s.Metadata.Term)
+}
+
+func (c *ConsensusModule) createSnapshot() {
+	c.mu.Lock()
+	snapTerm := c.log[c.lastApplied-c.snapshotIndex].Term
+	snap := &pb.Snapshot{
+		Metadata: &pb.Snapshot_Metadata{
+			Term:  snapTerm,
+			Index: c.lastApplied,
+		},
+	}
+	var err error
+	snap.Data, err = c.sm.CreateSnapshot(c.lastApplied)
+	if err != nil {
+		c.logger.Error("FAILED: state machine snapshot creation",
+			slog.Uint64("lastApplied", c.lastApplied),
+			slog.String("error", err.Error()))
+		c.mu.Unlock()
+		return
+	}
+	if err = c.snapper.Save(snap); err != nil {
+		c.logger.Error("FAILED: could not persist snapshot",
+			slog.String("error", err.Error()))
+		c.mu.Unlock()
+		return
+	}
+
+	c.log = c.log[c.lastApplied-c.snapshotIndex+1:]
+	c.snapshotIndex = c.lastApplied
+	c.snapshotTerm = int(snapTerm)
+	c.mu.Unlock()
 }
 
 func (c *ConsensusModule) AddMember(ctx context.Context, req *pb.AddMemberRequest) (*pb.AddMemberResponse, error) {

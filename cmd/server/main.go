@@ -99,7 +99,7 @@ func (k *kvs) ApplyEntries(entries []*pb.LogEntry) error {
 	return nil
 }
 
-func (k *kvs) CreateSnapshot(_ int64) ([]byte, error) {
+func (k *kvs) CreateSnapshot(_ uint64) ([]byte, error) {
 	b, err := json.Marshal(k.m)
 	if err != nil {
 		return nil, err
