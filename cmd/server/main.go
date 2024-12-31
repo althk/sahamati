@@ -8,6 +8,7 @@ import (
 	"github.com/althk/sahamati/persistence"
 	pb "github.com/althk/sahamati/proto/v1"
 	"github.com/althk/sahamati/raft"
+	"github.com/althk/sahamati/snapshotter"
 	"github.com/althk/wal"
 	"log/slog"
 	"net/http"
@@ -21,9 +22,10 @@ var (
 	addr     = flag.String("addr", ":6001", "raft node address")
 	allNodes = flag.String("nodes", "", `comma separated list of all nodes in this cluster, 
 including the current host, in the form 'host1:port1,host2:port2'`)
-	h2c    = flag.Bool("notls", false, "whether to use HTTP2 WITHOUT TLS (via h2c)")
-	join   = flag.Bool("join", false, "join an already running cluster (skip election)")
-	walDir = flag.String("waldir", "/tmp", "directory for writing WAL files")
+	h2c         = flag.Bool("notls", false, "whether to use HTTP2 WITHOUT TLS (via h2c)")
+	join        = flag.Bool("join", false, "join an already running cluster (skip election)")
+	walDir      = flag.String("waldir", "/tmp", "directory for writing WAL files")
+	snapshotDir = flag.String("snapshot_dir", "/tmp", "directory for snapshot file(s)")
 )
 
 func main() {
@@ -47,6 +49,11 @@ func main() {
 
 	dummyCommitApplier := func(entries []*pb.LogEntry) {}
 	store := persistence.NewMemStore()
+	snapper, err := snapshotter.NewLocalFile(path.Join(*snapshotDir, "snapshot.bin"))
+	if err != nil {
+		logger.Error("error initializing snapshotter", err)
+		panic(err)
+	}
 	walPath := path.Join(*walDir, strings.Replace(*addr, ":", "_", -1))
 	w, err := wal.New(walPath)
 	logger = logger.With(slog.Int("id", raftID))
@@ -55,7 +62,7 @@ func main() {
 		panic(err)
 	}
 	cm := raft.NewConsensusModule(
-		raftID, peers, logger, store, w, dummyCommitApplier, *join,
+		raftID, peers, logger, store, snapper, w, dummyCommitApplier, *join,
 	)
 
 	httpServer := network.NewHTTPServer(*addr, cm, *h2c, logger)
