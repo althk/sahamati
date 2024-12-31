@@ -142,6 +142,59 @@ func (x *PersistentState) GetLog() []*LogEntry {
 	return nil
 }
 
+type Snapshot struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Metadata *Snapshot_Metadata `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	Data     []byte             `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+}
+
+func (x *Snapshot) Reset() {
+	*x = Snapshot{}
+	mi := &file_proto_v1_cm_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Snapshot) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Snapshot) ProtoMessage() {}
+
+func (x *Snapshot) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_v1_cm_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Snapshot.ProtoReflect.Descriptor instead.
+func (*Snapshot) Descriptor() ([]byte, []int) {
+	return file_proto_v1_cm_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Snapshot) GetMetadata() *Snapshot_Metadata {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+func (x *Snapshot) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
 type RequestVoteRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -155,7 +208,7 @@ type RequestVoteRequest struct {
 
 func (x *RequestVoteRequest) Reset() {
 	*x = RequestVoteRequest{}
-	mi := &file_proto_v1_cm_proto_msgTypes[2]
+	mi := &file_proto_v1_cm_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -167,7 +220,7 @@ func (x *RequestVoteRequest) String() string {
 func (*RequestVoteRequest) ProtoMessage() {}
 
 func (x *RequestVoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_cm_proto_msgTypes[2]
+	mi := &file_proto_v1_cm_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -180,7 +233,7 @@ func (x *RequestVoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestVoteRequest.ProtoReflect.Descriptor instead.
 func (*RequestVoteRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v1_cm_proto_rawDescGZIP(), []int{2}
+	return file_proto_v1_cm_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *RequestVoteRequest) GetTerm() int32 {
@@ -222,7 +275,7 @@ type RequestVoteResponse struct {
 
 func (x *RequestVoteResponse) Reset() {
 	*x = RequestVoteResponse{}
-	mi := &file_proto_v1_cm_proto_msgTypes[3]
+	mi := &file_proto_v1_cm_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -234,7 +287,7 @@ func (x *RequestVoteResponse) String() string {
 func (*RequestVoteResponse) ProtoMessage() {}
 
 func (x *RequestVoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_cm_proto_msgTypes[3]
+	mi := &file_proto_v1_cm_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -247,7 +300,7 @@ func (x *RequestVoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestVoteResponse.ProtoReflect.Descriptor instead.
 func (*RequestVoteResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v1_cm_proto_rawDescGZIP(), []int{3}
+	return file_proto_v1_cm_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *RequestVoteResponse) GetTerm() int32 {
@@ -279,7 +332,7 @@ type AppendEntriesRequest struct {
 
 func (x *AppendEntriesRequest) Reset() {
 	*x = AppendEntriesRequest{}
-	mi := &file_proto_v1_cm_proto_msgTypes[4]
+	mi := &file_proto_v1_cm_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -291,7 +344,7 @@ func (x *AppendEntriesRequest) String() string {
 func (*AppendEntriesRequest) ProtoMessage() {}
 
 func (x *AppendEntriesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_cm_proto_msgTypes[4]
+	mi := &file_proto_v1_cm_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -304,7 +357,7 @@ func (x *AppendEntriesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppendEntriesRequest.ProtoReflect.Descriptor instead.
 func (*AppendEntriesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v1_cm_proto_rawDescGZIP(), []int{4}
+	return file_proto_v1_cm_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *AppendEntriesRequest) GetTerm() int32 {
@@ -360,7 +413,7 @@ type AppendEntriesResponse struct {
 
 func (x *AppendEntriesResponse) Reset() {
 	*x = AppendEntriesResponse{}
-	mi := &file_proto_v1_cm_proto_msgTypes[5]
+	mi := &file_proto_v1_cm_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -372,7 +425,7 @@ func (x *AppendEntriesResponse) String() string {
 func (*AppendEntriesResponse) ProtoMessage() {}
 
 func (x *AppendEntriesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_cm_proto_msgTypes[5]
+	mi := &file_proto_v1_cm_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -385,7 +438,7 @@ func (x *AppendEntriesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppendEntriesResponse.ProtoReflect.Descriptor instead.
 func (*AppendEntriesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v1_cm_proto_rawDescGZIP(), []int{5}
+	return file_proto_v1_cm_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *AppendEntriesResponse) GetTerm() int32 {
@@ -413,7 +466,7 @@ type AddMemberRequest struct {
 
 func (x *AddMemberRequest) Reset() {
 	*x = AddMemberRequest{}
-	mi := &file_proto_v1_cm_proto_msgTypes[6]
+	mi := &file_proto_v1_cm_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -425,7 +478,7 @@ func (x *AddMemberRequest) String() string {
 func (*AddMemberRequest) ProtoMessage() {}
 
 func (x *AddMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_cm_proto_msgTypes[6]
+	mi := &file_proto_v1_cm_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -438,7 +491,7 @@ func (x *AddMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddMemberRequest.ProtoReflect.Descriptor instead.
 func (*AddMemberRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v1_cm_proto_rawDescGZIP(), []int{6}
+	return file_proto_v1_cm_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *AddMemberRequest) GetNodeId() int32 {
@@ -466,7 +519,7 @@ type AddMemberResponse struct {
 
 func (x *AddMemberResponse) Reset() {
 	*x = AddMemberResponse{}
-	mi := &file_proto_v1_cm_proto_msgTypes[7]
+	mi := &file_proto_v1_cm_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -478,7 +531,7 @@ func (x *AddMemberResponse) String() string {
 func (*AddMemberResponse) ProtoMessage() {}
 
 func (x *AddMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_cm_proto_msgTypes[7]
+	mi := &file_proto_v1_cm_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -491,7 +544,7 @@ func (x *AddMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddMemberResponse.ProtoReflect.Descriptor instead.
 func (*AddMemberResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v1_cm_proto_rawDescGZIP(), []int{7}
+	return file_proto_v1_cm_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AddMemberResponse) GetStatus() bool {
@@ -519,7 +572,7 @@ type RemoveMemberRequest struct {
 
 func (x *RemoveMemberRequest) Reset() {
 	*x = RemoveMemberRequest{}
-	mi := &file_proto_v1_cm_proto_msgTypes[8]
+	mi := &file_proto_v1_cm_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -531,7 +584,7 @@ func (x *RemoveMemberRequest) String() string {
 func (*RemoveMemberRequest) ProtoMessage() {}
 
 func (x *RemoveMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_cm_proto_msgTypes[8]
+	mi := &file_proto_v1_cm_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -544,7 +597,7 @@ func (x *RemoveMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveMemberRequest.ProtoReflect.Descriptor instead.
 func (*RemoveMemberRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v1_cm_proto_rawDescGZIP(), []int{8}
+	return file_proto_v1_cm_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RemoveMemberRequest) GetNodeId() int32 {
@@ -572,7 +625,7 @@ type RemoveMemberResponse struct {
 
 func (x *RemoveMemberResponse) Reset() {
 	*x = RemoveMemberResponse{}
-	mi := &file_proto_v1_cm_proto_msgTypes[9]
+	mi := &file_proto_v1_cm_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -584,7 +637,7 @@ func (x *RemoveMemberResponse) String() string {
 func (*RemoveMemberResponse) ProtoMessage() {}
 
 func (x *RemoveMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_cm_proto_msgTypes[9]
+	mi := &file_proto_v1_cm_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -597,7 +650,7 @@ func (x *RemoveMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveMemberResponse.ProtoReflect.Descriptor instead.
 func (*RemoveMemberResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v1_cm_proto_rawDescGZIP(), []int{9}
+	return file_proto_v1_cm_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RemoveMemberResponse) GetStatus() bool {
@@ -612,6 +665,59 @@ func (x *RemoveMemberResponse) GetLeaderHint() string {
 		return x.LeaderHint
 	}
 	return ""
+}
+
+type Snapshot_Metadata struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Term  int32  `protobuf:"varint,1,opt,name=term,proto3" json:"term,omitempty"`
+	Index uint64 `protobuf:"varint,2,opt,name=index,proto3" json:"index,omitempty"`
+}
+
+func (x *Snapshot_Metadata) Reset() {
+	*x = Snapshot_Metadata{}
+	mi := &file_proto_v1_cm_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Snapshot_Metadata) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Snapshot_Metadata) ProtoMessage() {}
+
+func (x *Snapshot_Metadata) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_v1_cm_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Snapshot_Metadata.ProtoReflect.Descriptor instead.
+func (*Snapshot_Metadata) Descriptor() ([]byte, []int) {
+	return file_proto_v1_cm_proto_rawDescGZIP(), []int{2, 0}
+}
+
+func (x *Snapshot_Metadata) GetTerm() int32 {
+	if x != nil {
+		return x.Term
+	}
+	return 0
+}
+
+func (x *Snapshot_Metadata) GetIndex() uint64 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
 }
 
 var File_proto_v1_cm_proto protoreflect.FileDescriptor
@@ -630,7 +736,16 @@ var file_proto_v1_cm_proto_rawDesc = []byte{
 	0x65, 0x64, 0x5f, 0x66, 0x6f, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x52, 0x08, 0x76, 0x6f,
 	0x74, 0x65, 0x64, 0x46, 0x6f, 0x72, 0x12, 0x24, 0x0a, 0x03, 0x6c, 0x6f, 0x67, 0x18, 0x03, 0x20,
 	0x03, 0x28, 0x0b, 0x32, 0x12, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x76, 0x31, 0x2e, 0x4c,
-	0x6f, 0x67, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x03, 0x6c, 0x6f, 0x67, 0x22, 0x91, 0x01, 0x0a,
+	0x6f, 0x67, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x03, 0x6c, 0x6f, 0x67, 0x22, 0x8d, 0x01, 0x0a,
+	0x08, 0x53, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f, 0x74, 0x12, 0x37, 0x0a, 0x08, 0x6d, 0x65, 0x74,
+	0x61, 0x64, 0x61, 0x74, 0x61, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1b, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x6e, 0x61, 0x70, 0x73, 0x68, 0x6f, 0x74, 0x2e,
+	0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x52, 0x08, 0x6d, 0x65, 0x74, 0x61, 0x64, 0x61,
+	0x74, 0x61, 0x12, 0x12, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x61, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c,
+	0x52, 0x04, 0x64, 0x61, 0x74, 0x61, 0x1a, 0x34, 0x0a, 0x08, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61,
+	0x74, 0x61, 0x12, 0x12, 0x0a, 0x04, 0x74, 0x65, 0x72, 0x6d, 0x18, 0x01, 0x20, 0x01, 0x28, 0x05,
+	0x52, 0x04, 0x74, 0x65, 0x72, 0x6d, 0x12, 0x14, 0x0a, 0x05, 0x69, 0x6e, 0x64, 0x65, 0x78, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x04, 0x52, 0x05, 0x69, 0x6e, 0x64, 0x65, 0x78, 0x22, 0x91, 0x01, 0x0a,
 	0x12, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x56, 0x6f, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75,
 	0x65, 0x73, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x74, 0x65, 0x72, 0x6d, 0x18, 0x01, 0x20, 0x01, 0x28,
 	0x05, 0x52, 0x04, 0x74, 0x65, 0x72, 0x6d, 0x12, 0x21, 0x0a, 0x0c, 0x63, 0x61, 0x6e, 0x64, 0x69,
@@ -720,35 +835,38 @@ func file_proto_v1_cm_proto_rawDescGZIP() []byte {
 	return file_proto_v1_cm_proto_rawDescData
 }
 
-var file_proto_v1_cm_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_proto_v1_cm_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_proto_v1_cm_proto_goTypes = []any{
 	(*LogEntry)(nil),              // 0: proto.v1.LogEntry
 	(*PersistentState)(nil),       // 1: proto.v1.PersistentState
-	(*RequestVoteRequest)(nil),    // 2: proto.v1.RequestVoteRequest
-	(*RequestVoteResponse)(nil),   // 3: proto.v1.RequestVoteResponse
-	(*AppendEntriesRequest)(nil),  // 4: proto.v1.AppendEntriesRequest
-	(*AppendEntriesResponse)(nil), // 5: proto.v1.AppendEntriesResponse
-	(*AddMemberRequest)(nil),      // 6: proto.v1.AddMemberRequest
-	(*AddMemberResponse)(nil),     // 7: proto.v1.AddMemberResponse
-	(*RemoveMemberRequest)(nil),   // 8: proto.v1.RemoveMemberRequest
-	(*RemoveMemberResponse)(nil),  // 9: proto.v1.RemoveMemberResponse
+	(*Snapshot)(nil),              // 2: proto.v1.Snapshot
+	(*RequestVoteRequest)(nil),    // 3: proto.v1.RequestVoteRequest
+	(*RequestVoteResponse)(nil),   // 4: proto.v1.RequestVoteResponse
+	(*AppendEntriesRequest)(nil),  // 5: proto.v1.AppendEntriesRequest
+	(*AppendEntriesResponse)(nil), // 6: proto.v1.AppendEntriesResponse
+	(*AddMemberRequest)(nil),      // 7: proto.v1.AddMemberRequest
+	(*AddMemberResponse)(nil),     // 8: proto.v1.AddMemberResponse
+	(*RemoveMemberRequest)(nil),   // 9: proto.v1.RemoveMemberRequest
+	(*RemoveMemberResponse)(nil),  // 10: proto.v1.RemoveMemberResponse
+	(*Snapshot_Metadata)(nil),     // 11: proto.v1.Snapshot.Metadata
 }
 var file_proto_v1_cm_proto_depIdxs = []int32{
-	0, // 0: proto.v1.PersistentState.log:type_name -> proto.v1.LogEntry
-	0, // 1: proto.v1.AppendEntriesRequest.entries:type_name -> proto.v1.LogEntry
-	2, // 2: proto.v1.CMService.RequestVote:input_type -> proto.v1.RequestVoteRequest
-	4, // 3: proto.v1.CMService.AppendEntries:input_type -> proto.v1.AppendEntriesRequest
-	6, // 4: proto.v1.CMService.AddMember:input_type -> proto.v1.AddMemberRequest
-	8, // 5: proto.v1.CMService.RemoveMember:input_type -> proto.v1.RemoveMemberRequest
-	3, // 6: proto.v1.CMService.RequestVote:output_type -> proto.v1.RequestVoteResponse
-	5, // 7: proto.v1.CMService.AppendEntries:output_type -> proto.v1.AppendEntriesResponse
-	7, // 8: proto.v1.CMService.AddMember:output_type -> proto.v1.AddMemberResponse
-	9, // 9: proto.v1.CMService.RemoveMember:output_type -> proto.v1.RemoveMemberResponse
-	6, // [6:10] is the sub-list for method output_type
-	2, // [2:6] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	0,  // 0: proto.v1.PersistentState.log:type_name -> proto.v1.LogEntry
+	11, // 1: proto.v1.Snapshot.metadata:type_name -> proto.v1.Snapshot.Metadata
+	0,  // 2: proto.v1.AppendEntriesRequest.entries:type_name -> proto.v1.LogEntry
+	3,  // 3: proto.v1.CMService.RequestVote:input_type -> proto.v1.RequestVoteRequest
+	5,  // 4: proto.v1.CMService.AppendEntries:input_type -> proto.v1.AppendEntriesRequest
+	7,  // 5: proto.v1.CMService.AddMember:input_type -> proto.v1.AddMemberRequest
+	9,  // 6: proto.v1.CMService.RemoveMember:input_type -> proto.v1.RemoveMemberRequest
+	4,  // 7: proto.v1.CMService.RequestVote:output_type -> proto.v1.RequestVoteResponse
+	6,  // 8: proto.v1.CMService.AppendEntries:output_type -> proto.v1.AppendEntriesResponse
+	8,  // 9: proto.v1.CMService.AddMember:output_type -> proto.v1.AddMemberResponse
+	10, // 10: proto.v1.CMService.RemoveMember:output_type -> proto.v1.RemoveMemberResponse
+	7,  // [7:11] is the sub-list for method output_type
+	3,  // [3:7] is the sub-list for method input_type
+	3,  // [3:3] is the sub-list for extension type_name
+	3,  // [3:3] is the sub-list for extension extendee
+	0,  // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_proto_v1_cm_proto_init() }
@@ -762,7 +880,7 @@ func file_proto_v1_cm_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_proto_v1_cm_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

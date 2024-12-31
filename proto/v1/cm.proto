@@ -15,6 +15,15 @@ message PersistentState {
   repeated LogEntry log = 3;
 }
 
+message Snapshot {
+  message Metadata {
+    int32 term = 1;
+    uint64 index = 2;
+  }
+  Metadata metadata = 1;
+  bytes data = 2;
+}
+
 message RequestVoteRequest {
   int32 term = 1;
   int32 candidate_id = 2;
