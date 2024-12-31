@@ -61,6 +61,11 @@ type persistence interface {
 	HasData() bool
 }
 
+type snapshotter interface {
+	Load() (*pb.Snapshot, error)
+	Save(*pb.Snapshot) error
+}
+
 type commitApplier func(entries []*pb.LogEntry)
 
 func getRPCClient(peer Peer) peerClient {
