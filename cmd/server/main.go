@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"github.com/althk/sahamati/network"
 	"github.com/althk/sahamati/persistence"
 	pb "github.com/althk/sahamati/proto/v1"
@@ -62,7 +64,8 @@ func main() {
 		panic(err)
 	}
 	cm := raft.NewConsensusModule(
-		raftID, peers, logger, store, snapper, w, dummyCommitApplier, *join,
+		raftID, peers, logger, store, snapper,
+		w, dummyCommitApplier, &kvs{m: make(map[string]string)}, *join,
 	)
 
 	httpServer := network.NewHTTPServer(*addr, cm, *h2c, logger)
@@ -80,4 +83,37 @@ func main() {
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		panic(err)
 	}
+}
+
+type kvs struct {
+	m map[string]string
+}
+
+func (k *kvs) ApplyEntries(entries []*pb.LogEntry) error {
+	for _, e := range entries {
+		var entry map[string]string
+		err := json.Unmarshal(e.Command, &entry)
+		if err != nil {
+			fmt.Println("error unmarshalling entry:", err)
+			continue
+		}
+		k.m[entry["key"]] = entry["value"]
+	}
+	return nil
+}
+
+func (k *kvs) CreateSnapshot(_ int64) ([]byte, error) {
+	b, err := json.Marshal(k.m)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+func (k *kvs) RestoreFromSnapshot(data []byte) error {
+	err := json.Unmarshal(data, &k.m)
+	if err != nil {
+		return err
+	}
+	return nil
 }
