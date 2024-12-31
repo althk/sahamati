@@ -61,6 +61,12 @@ type persistence interface {
 	HasData() bool
 }
 
+type stateMachine interface {
+	ApplyEntries(entries []*pb.LogEntry) error
+	CreateSnapshot(snapshotIndex int64) ([]byte, error)
+	RestoreFromSnapshot(data []byte) error
+}
+
 type snapshotter interface {
 	Load() (*pb.Snapshot, error)
 	Save(*pb.Snapshot) error
@@ -107,6 +113,7 @@ type ConsensusModule struct {
 	once           sync.Once
 	logger         *slog.Logger
 	store          persistence
+	sm             stateMachine
 	snapper        snapshotter
 	wal            *wal.WAL
 	leaderID       int
@@ -115,7 +122,7 @@ type ConsensusModule struct {
 	addingMember   bool
 }
 
-func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, store persistence, snapper snapshotter, wal *wal.WAL, applyCB commitApplier, join bool) *ConsensusModule {
+func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, store persistence, snapper snapshotter, wal *wal.WAL, applyCB commitApplier, sm stateMachine, join bool) *ConsensusModule {
 	return &ConsensusModule{
 		id:          id,
 		votedFor:    -1,
@@ -133,6 +140,7 @@ func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, store p
 		matchIndex:  make(map[int]int),
 		store:       store,
 		snapper:     snapper,
+		sm:          sm,
 		commitIndex: -1,
 		lastApplied: -1,
 		joinCluster: join,
@@ -731,9 +739,11 @@ func (c *ConsensusModule) loadFromSnapshot() {
 	s, err := c.snapper.Load()
 	if err != nil {
 		panic(err)
-		return
 	}
-	// c.sm.RestoreFromSnapshot(s.Data)
+	err = c.sm.RestoreFromSnapshot(s.Data)
+	if err != nil {
+		panic(err)
+	}
 	c.lastApplied = int(s.Metadata.Index)
 	c.commitIndex = int(s.Metadata.Index)
 }
