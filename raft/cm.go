@@ -559,14 +559,17 @@ func (c *ConsensusModule) logState() {
 				slog.String("state", fmt.Sprintf("%v", c.state)),
 				slog.String("raft-id", fmt.Sprintf("%v", c.id)),
 				slog.String("leader-id", fmt.Sprintf("%v", c.leaderID)),
+				slog.String("commit-idx", fmt.Sprintf("%v", c.commitIndex)),
+				slog.String("last-applied", fmt.Sprintf("%v", c.lastApplied)),
 			)
 			c.mu.Unlock()
 		}
 	}
 }
 
-func (c *ConsensusModule) cmState() (id int, currentTerm int, votedFor int, state State) {
-	return c.id, c.currentTerm, c.votedFor, c.state
+func (c *ConsensusModule) cmState() (id int, currentTerm int, votedFor int,
+	commitIndex uint64, lastApplied uint64, state State) {
+	return c.id, c.currentTerm, c.votedFor, c.commitIndex, c.lastApplied, c.state
 }
 
 func (c *ConsensusModule) Propose(cmd []byte) uint64 {
