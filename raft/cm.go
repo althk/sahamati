@@ -67,8 +67,6 @@ type snapshotter interface {
 	HasData() bool
 }
 
-type commitApplier func(entries []*pb.LogEntry)
-
 func getRPCClient(peer Peer) peerClient {
 	if peer.Client == nil {
 		peer.Client = network.NewCMClient(peer.Addr, false)
@@ -100,7 +98,6 @@ type ConsensusModule struct {
 	aeReadyCh   chan bool
 	cfgCommitCh chan configChange // used to notify internally for add/remove node rpc
 	doneCh      chan bool
-	applyCB     commitApplier
 
 	mu             sync.RWMutex
 	peerMu         map[int]*sync.Mutex
@@ -116,7 +113,7 @@ type ConsensusModule struct {
 }
 
 func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, snapper snapshotter,
-	wal *wal.WAL, applyCB commitApplier, sm stateMachine, join bool) *ConsensusModule {
+	wal *wal.WAL, sm stateMachine, join bool) *ConsensusModule {
 	return &ConsensusModule{
 		id:          id,
 		votedFor:    -1,
@@ -129,7 +126,6 @@ func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, snapper
 		aeReadyCh:   make(chan bool),
 		cfgCommitCh: make(chan configChange),
 		doneCh:      make(chan bool),
-		applyCB:     applyCB,
 		nextIndex:   make(map[int]uint64),
 		matchIndex:  make(map[int]uint64),
 		snapper:     snapper,
@@ -646,7 +642,12 @@ func (c *ConsensusModule) applyCommits() {
 	}
 	c.mu.Unlock()
 
-	c.applyCB(entries)
+	err := c.sm.ApplyEntries(entries)
+	if err != nil {
+		c.logger.Error("FAILED: applying commits",
+			slog.Uint64("commitidx", c.commitIndex),
+			slog.Uint64("lastapplied", c.lastApplied))
+	}
 }
 
 func (c *ConsensusModule) appendEntry(entry *pb.LogEntry) error {

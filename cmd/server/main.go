@@ -48,7 +48,6 @@ func main() {
 		}
 	}
 
-	dummyCommitApplier := func(entries []*pb.LogEntry) {}
 	snapper, err := snapshotter.NewLocalFile(path.Join(*snapshotDir, "snapshot.bin"))
 	if err != nil {
 		logger.Error("error initializing snapshotter", err)
@@ -63,7 +62,7 @@ func main() {
 	}
 	cm := raft.NewConsensusModule(
 		raftID, peers, logger, snapper,
-		w, dummyCommitApplier, &kvs{m: make(map[string]string)}, *join,
+		w, &kvs{m: make(map[string]string)}, *join,
 	)
 
 	httpServer := network.NewHTTPServer(*addr, cm, *h2c, logger)
