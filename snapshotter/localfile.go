@@ -65,12 +65,17 @@ func (l *LocalFile) HasData() bool {
 }
 
 func NewLocalFile(path string) (*LocalFile, error) {
-	fs, err := os.Stat(path)
+	fs, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return nil, err
 	}
+	fi, err := fs.Stat()
+	if err != nil {
+		return nil, err
+	}
+	_ = fs.Close()
 	return &LocalFile{
 		path: path,
-		size: fs.Size(),
+		size: fi.Size(),
 	}, nil
 }
