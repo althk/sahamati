@@ -55,12 +55,6 @@ type peerClient interface {
 	AppendEntries(ctx context.Context, req *pb.AppendEntriesRequest) (*pb.AppendEntriesResponse, error)
 }
 
-type persistence interface {
-	Load() (*pb.PersistentState, error)
-	Save(*pb.PersistentState) error
-	HasData() bool
-}
-
 type stateMachine interface {
 	ApplyEntries(entries []*pb.LogEntry) error
 	CreateSnapshot(snapshotIndex int64) ([]byte, error)
@@ -112,7 +106,6 @@ type ConsensusModule struct {
 	peerMu         map[int]*sync.Mutex
 	once           sync.Once
 	logger         *slog.Logger
-	store          persistence
 	sm             stateMachine
 	snapper        snapshotter
 	wal            *wal.WAL
@@ -122,7 +115,8 @@ type ConsensusModule struct {
 	addingMember   bool
 }
 
-func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, store persistence, snapper snapshotter, wal *wal.WAL, applyCB commitApplier, sm stateMachine, join bool) *ConsensusModule {
+func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, snapper snapshotter,
+	wal *wal.WAL, applyCB commitApplier, sm stateMachine, join bool) *ConsensusModule {
 	return &ConsensusModule{
 		id:          id,
 		votedFor:    -1,
@@ -138,7 +132,6 @@ func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, store p
 		applyCB:     applyCB,
 		nextIndex:   make(map[int]int),
 		matchIndex:  make(map[int]int),
-		store:       store,
 		snapper:     snapper,
 		sm:          sm,
 		commitIndex: -1,
@@ -584,11 +577,7 @@ func (c *ConsensusModule) Propose(cmd []byte) uint64 {
 		c.mu.Unlock()
 		return -1
 	}
-	err = c.persistState()
-	if err != nil {
-		c.mu.Unlock()
-		return -1
-	}
+
 	c.mu.Unlock()
 	c.aeReadyCh <- true
 	return c.realIdx
@@ -718,20 +707,6 @@ func (c *ConsensusModule) Shutdown() {
 	})
 }
 
-func (c *ConsensusModule) loadFromStore() {
-	if !c.store.HasData() {
-		return
-	}
-	s, err := c.store.Load()
-	if err != nil {
-		panic(err)
-		return
-	}
-	c.currentTerm = int(s.Term)
-	c.votedFor = int(s.VotedFor)
-	c.log = s.Log
-}
-
 func (c *ConsensusModule) loadFromSnapshot() {
 	if !c.snapper.HasData() {
 		return
@@ -746,15 +721,6 @@ func (c *ConsensusModule) loadFromSnapshot() {
 	}
 	c.lastApplied = int(s.Metadata.Index)
 	c.commitIndex = int(s.Metadata.Index)
-}
-
-func (c *ConsensusModule) persistState() error {
-	s := &pb.PersistentState{
-		Term:     int32(c.currentTerm),
-		VotedFor: int32(c.votedFor),
-		Log:      c.log,
-	}
-	return c.store.Save(s)
 }
 
 func (c *ConsensusModule) AddMember(ctx context.Context, req *pb.AddMemberRequest) (*pb.AddMemberResponse, error) {

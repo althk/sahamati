@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/althk/sahamati/network"
-	"github.com/althk/sahamati/persistence"
 	pb "github.com/althk/sahamati/proto/v1"
 	"github.com/althk/sahamati/raft"
 	"github.com/althk/sahamati/snapshotter"
@@ -50,7 +49,6 @@ func main() {
 	}
 
 	dummyCommitApplier := func(entries []*pb.LogEntry) {}
-	store := persistence.NewMemStore()
 	snapper, err := snapshotter.NewLocalFile(path.Join(*snapshotDir, "snapshot.bin"))
 	if err != nil {
 		logger.Error("error initializing snapshotter", err)
@@ -64,7 +62,7 @@ func main() {
 		panic(err)
 	}
 	cm := raft.NewConsensusModule(
-		raftID, peers, logger, store, snapper,
+		raftID, peers, logger, snapper,
 		w, dummyCommitApplier, &kvs{m: make(map[string]string)}, *join,
 	)
 
