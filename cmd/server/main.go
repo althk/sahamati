@@ -23,9 +23,9 @@ var (
 	addr     = flag.String("addr", ":6001", "raft node address")
 	allNodes = flag.String("nodes", "", `comma separated list of all nodes in this cluster, 
 including the current host, in the form 'host1:port1,host2:port2'`)
-	h2c         = flag.Bool("notls", false, "whether to use HTTP2 WITHOUT TLS (via h2c)")
+	h2c         = flag.Bool("no_tls", false, "whether to use HTTP2 WITHOUT TLS (via h2c)")
 	join        = flag.Bool("join", false, "join an already running cluster (skip election)")
-	walDir      = flag.String("waldir", "/tmp", "directory for writing WAL files")
+	walDir      = flag.String("wal_dir", "/tmp", "directory for writing WAL files")
 	snapshotDir = flag.String("snapshot_dir", "/tmp", "directory for snapshot file(s)")
 )
 
