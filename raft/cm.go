@@ -642,6 +642,45 @@ func (c *ConsensusModule) appendEntry(entry *pb.LogEntry) error {
 	return nil
 }
 
+func (c *ConsensusModule) setTerm(term int) error {
+	err := c.appendToWAL("term", term)
+	if err != nil {
+		return err
+	}
+	c.currentTerm = term
+	return nil
+}
+
+func (c *ConsensusModule) setVotedFor(votedFor int) error {
+	err := c.appendToWAL("votedFor", votedFor)
+	if err != nil {
+		return err
+	}
+	c.votedFor = votedFor
+	return nil
+}
+
+func (c *ConsensusModule) setCommitIndex(commitIndex int) error {
+	err := c.appendToWAL("commitIndex", commitIndex)
+	if err != nil {
+		return err
+	}
+	c.commitIndex = commitIndex
+	return nil
+}
+
+func (c *ConsensusModule) appendToWAL(key string, val any) error {
+	b, err := json.Marshal(val)
+	if err != nil {
+		return err
+	}
+	err = c.wal.Put(key, b)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *ConsensusModule) applyConfigChange(cfg configChange) {
 	switch cfg.Type {
 	case AddMember:
