@@ -27,7 +27,7 @@ message Snapshot {
 message RequestVoteRequest {
   int32 term = 1;
   int32 candidate_id = 2;
-  int32 last_log_idx = 3;
+  uint64 last_log_idx = 3;
   int32 last_log_term = 4;
 }
 
@@ -39,9 +39,9 @@ message RequestVoteResponse {
 message AppendEntriesRequest {
   int32 term = 1;
   int32 leader_id = 2;
-  int32 prev_log_idx = 3;
+  uint64 prev_log_idx = 3;
   int32 prev_log_term = 4;
-  int32 leader_commit_idx =5;
+  uint64 leader_commit_idx =5;
   repeated LogEntry entries = 6;
 }
 

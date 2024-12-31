@@ -92,10 +92,10 @@ type ConsensusModule struct {
 	electionReset   time.Time
 	heartbeatTicker *time.Ticker
 
-	commitIndex int
-	lastApplied int
-	nextIndex   map[int]int
-	matchIndex  map[int]int
+	commitIndex uint64
+	lastApplied uint64
+	nextIndex   map[int]uint64
+	matchIndex  map[int]uint64
 
 	aeReadyCh   chan bool
 	cfgCommitCh chan configChange // used to notify internally for add/remove node rpc
@@ -130,8 +130,8 @@ func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, snapper
 		cfgCommitCh: make(chan configChange),
 		doneCh:      make(chan bool),
 		applyCB:     applyCB,
-		nextIndex:   make(map[int]int),
-		matchIndex:  make(map[int]int),
+		nextIndex:   make(map[int]uint64),
+		matchIndex:  make(map[int]uint64),
 		snapper:     snapper,
 		sm:          sm,
 		commitIndex: -1,
@@ -200,8 +200,14 @@ func (c *ConsensusModule) runElectionTimer() {
 func (c *ConsensusModule) becomeFollower(term int) {
 	c.mu.Lock()
 	c.state = Follower
-	c.currentTerm = term
-	c.votedFor = -1
+	err := c.setCurrentTerm(term)
+	if err != nil {
+		panic(err)
+	}
+	err = c.setVotedFor(-1)
+	if err != nil {
+		panic(err)
+	}
 	c.electionReset = time.Now()
 	c.mu.Unlock()
 	go c.runElectionTimer()
@@ -212,8 +218,14 @@ func (c *ConsensusModule) startElection() {
 		slog.String("term", fmt.Sprintf("%v", c.currentTerm)))
 	c.mu.Lock()
 	c.state = Candidate
-	c.currentTerm += 1
-	c.votedFor = c.id
+	err := c.setCurrentTerm(c.currentTerm + 1)
+	if err != nil {
+		panic(err)
+	}
+	err = c.setVotedFor(c.id)
+	if err != nil {
+		panic(err)
+	}
 	c.votesReceived = 1
 	lastLogIdx, lastLogTerm := c.lastLogIndexAndTerm()
 	c.mu.Unlock()
@@ -228,14 +240,14 @@ func (c *ConsensusModule) startElection() {
 	go c.runElectionTimer()
 }
 
-func (c *ConsensusModule) lastLogIndexAndTerm() (int, int) {
+func (c *ConsensusModule) lastLogIndexAndTerm() (uint64, int) {
 	if len(c.log) == 0 {
 		return -1, -1
 	}
-	return len(c.log) - 1, int(c.log[len(c.log)-1].Term)
+	return c.realIdx, int(c.log[len(c.log)-1].Term)
 }
 
-func (c *ConsensusModule) sendVoteRequest(peer Peer, term int, idx int, logTerm int) {
+func (c *ConsensusModule) sendVoteRequest(peer Peer, term int, idx uint64, logTerm int) {
 	c.getPeerMutex(peer.ID).Lock()
 	defer c.getPeerMutex(peer.ID).Unlock()
 	client := getRPCClient(peer)
@@ -248,7 +260,7 @@ func (c *ConsensusModule) sendVoteRequest(peer Peer, term int, idx int, logTerm 
 	req := pb.RequestVoteRequest{
 		Term:        int32(term),
 		CandidateId: int32(c.id),
-		LastLogIdx:  int32(idx),
+		LastLogIdx:  idx,
 		LastLogTerm: int32(logTerm),
 	}
 	c.mu.Unlock()
@@ -298,7 +310,7 @@ func (c *ConsensusModule) becomeLeader() {
 		if peer.ID == c.id {
 			continue
 		}
-		c.nextIndex[peer.ID] = len(c.log)
+		c.nextIndex[peer.ID] = c.realIdx
 		c.matchIndex[peer.ID] = -1
 	}
 
@@ -355,7 +367,7 @@ func (c *ConsensusModule) sendAppendEntriesToPeer(peer Peer, savedTerm int, hear
 	}
 	client := getRPCClient(peer)
 	c.mu.Lock()
-	prevLogIdx := -1
+	prevLogIdx := uint64(-1)
 	prevLogTerm := -1
 	entries := make([]*pb.LogEntry, 0)
 
@@ -372,8 +384,8 @@ func (c *ConsensusModule) sendAppendEntriesToPeer(peer Peer, savedTerm int, hear
 		LeaderId:        int32(c.id),
 		Entries:         entries,
 		PrevLogTerm:     int32(prevLogTerm),
-		PrevLogIdx:      int32(prevLogIdx),
-		LeaderCommitIdx: int32(c.commitIndex),
+		PrevLogIdx:      prevLogIdx,
+		LeaderCommitIdx: c.commitIndex,
 	}
 	c.mu.Unlock()
 
@@ -394,18 +406,18 @@ func (c *ConsensusModule) processAppendEntriesResponse(req *pb.AppendEntriesRequ
 	c.mu.Lock()
 	if c.state == Leader && resp.Term == req.Term {
 		if !resp.Success {
-			c.nextIndex[peer.ID] = int(req.PrevLogIdx)
+			c.nextIndex[peer.ID] = req.PrevLogIdx
 			c.mu.Unlock()
 			return
 		}
 
 		if len(req.Entries) > 0 {
-			c.nextIndex[peer.ID] += len(req.Entries)
+			c.nextIndex[peer.ID] += uint64(len(req.Entries))
 			c.matchIndex[peer.ID] = max(c.nextIndex[peer.ID]-1, -1)
 			c.logger.Info("AppendEntries completed, updating index",
 				slog.String("peer", peer.Addr),
-				slog.Int("nextIndex", c.nextIndex[peer.ID]),
-				slog.Int("matchIndex", c.matchIndex[peer.ID]),
+				slog.Uint64("nextIndex", c.nextIndex[peer.ID]),
+				slog.Uint64("matchIndex", c.matchIndex[peer.ID]),
 			)
 			c.mu.Unlock()
 			c.advanceCommitIndex()
@@ -433,7 +445,7 @@ func (c *ConsensusModule) HandleVoteRequest(_ context.Context, req *pb.RequestVo
 
 	// election safety (section 3.6.1)
 	if int32(lastLogTerm) > req.LastLogTerm ||
-		(int32(lastLogTerm) == req.LastLogTerm && int32(lastLogIdx) > req.LastLogIdx) {
+		(int32(lastLogTerm) == req.LastLogTerm && lastLogIdx > req.LastLogIdx) {
 		resp.VoteGranted = false
 		return &resp, nil
 	}
@@ -476,7 +488,7 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 	c.mu.Unlock()
 
 	if req.PrevLogIdx >= 0 &&
-		(req.PrevLogIdx >= int32(len(c.log)) || req.PrevLogTerm != c.log[req.PrevLogIdx].Term) {
+		(req.PrevLogIdx >= c.realIdx || req.PrevLogTerm != c.log[req.PrevLogIdx].Term) {
 		resp.Success = false
 		return &resp, nil
 	}
@@ -520,8 +532,10 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 	}
 	c.realIdx = c.log[len(c.log)-1].RealIdx
 	mustApply := false
-	if req.LeaderCommitIdx > int32(c.commitIndex) {
-		c.commitIndex = int(min(req.LeaderCommitIdx, int32(len(c.log)-1)))
+	if req.LeaderCommitIdx > c.commitIndex {
+		if err := c.setCommitIndex(min(req.LeaderCommitIdx, c.realIdx)); err != nil {
+			c.commitIndex = min(req.LeaderCommitIdx, c.realIdx)
+		}
 		mustApply = true
 	}
 	c.leaderID = int(req.LeaderId)
@@ -587,7 +601,7 @@ func (c *ConsensusModule) advanceCommitIndex() {
 	c.mu.Lock()
 	commitIdx := c.commitIndex
 	c.mu.Unlock()
-	for i := commitIdx + 1; i < len(c.log); i++ {
+	for i := commitIdx + 1; i < c.realIdx; i++ {
 		if c.log[i].Term == int32(c.currentTerm) {
 			count := 1
 			for _, peer := range c.peers {
@@ -614,8 +628,8 @@ func (c *ConsensusModule) advanceCommitIndex() {
 func (c *ConsensusModule) applyCommits() {
 	var entries []*pb.LogEntry
 	c.logger.Info("applying commits",
-		slog.Int("commitidx", c.commitIndex),
-		slog.Int("lastapplied", c.lastApplied))
+		slog.Uint64("commitidx", c.commitIndex),
+		slog.Uint64("lastapplied", c.lastApplied))
 	c.mu.Lock()
 	for c.lastApplied < c.commitIndex {
 		c.lastApplied++
@@ -648,7 +662,7 @@ func (c *ConsensusModule) appendEntry(entry *pb.LogEntry) error {
 	return nil
 }
 
-func (c *ConsensusModule) setTerm(term int) error {
+func (c *ConsensusModule) setCurrentTerm(term int) error {
 	err := c.appendToWAL("term", term)
 	if err != nil {
 		return err
@@ -666,7 +680,7 @@ func (c *ConsensusModule) setVotedFor(votedFor int) error {
 	return nil
 }
 
-func (c *ConsensusModule) setCommitIndex(commitIndex int) error {
+func (c *ConsensusModule) setCommitIndex(commitIndex uint64) error {
 	err := c.appendToWAL("commitIndex", commitIndex)
 	if err != nil {
 		return err
@@ -719,8 +733,8 @@ func (c *ConsensusModule) loadFromSnapshot() {
 	if err != nil {
 		panic(err)
 	}
-	c.lastApplied = int(s.Metadata.Index)
-	c.commitIndex = int(s.Metadata.Index)
+	c.lastApplied = s.Metadata.Index
+	c.commitIndex = s.Metadata.Index
 }
 
 func (c *ConsensusModule) AddMember(ctx context.Context, req *pb.AddMemberRequest) (*pb.AddMemberResponse, error) {
