@@ -152,6 +152,7 @@ func (c *ConsensusModule) getPeerMutex(id int) *sync.Mutex {
 func (c *ConsensusModule) Init() {
 	if c.snapper.HasData() {
 		c.loadFromSnapshot()
+		// TODO: c.loadFromWAL()
 	}
 	if !c.joinCluster {
 		c.becomeFollower(c.currentTerm)
@@ -239,7 +240,7 @@ func (c *ConsensusModule) startElection() {
 }
 
 func (c *ConsensusModule) lastLogIndexAndTerm() (uint64, int) {
-	if len(c.log) == 0 {
+	if c.realIdx == 0 {
 		return 0, -1
 	}
 	return c.realIdx, int(c.log[len(c.log)-1].Term)
@@ -371,11 +372,17 @@ func (c *ConsensusModule) sendAppendEntriesToPeer(peer Peer, savedTerm int, hear
 
 	if !heartbeat {
 		ni := c.nextIndex[peer.ID]
-		prevLogIdx = ni - 1
-		if prevLogIdx > 0 {
-			prevLogTerm = int(c.log[prevLogIdx].Term)
+		if ni <= c.snapshotIndex {
+			// TODO: if ni <= c.snapshotIndex, issue InstallSnapshot RPC
+			c.mu.Unlock()
+			return
+		} else {
+			prevLogIdx = ni - 1
+			if prevLogIdx > 0 {
+				prevLogTerm = int(c.log[prevLogIdx-c.snapshotIndex+1].Term)
+			}
+			entries = c.log[ni-c.snapshotIndex+1:]
 		}
-		entries = c.log[ni:]
 	}
 	req := pb.AppendEntriesRequest{
 		Term:            int32(savedTerm),
@@ -486,7 +493,7 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 	c.mu.Unlock()
 
 	if req.PrevLogIdx > 0 &&
-		(req.PrevLogIdx >= c.realIdx || req.PrevLogTerm != c.log[req.PrevLogIdx].Term) {
+		(req.PrevLogIdx >= c.realIdx || req.PrevLogTerm != c.log[req.PrevLogIdx-c.snapshotIndex+1].Term) {
 		resp.Success = false
 		return &resp, nil
 	}
@@ -501,22 +508,22 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 		return &resp, nil
 	}
 
-	prevLogIdx := int(req.PrevLogIdx)
+	prevLogIdx := req.PrevLogIdx
 
 	c.logger.Info("Appending new entries",
 		slog.String("entries", fmt.Sprintf("%v", req.Entries)))
 
 	c.mu.Lock()
 	for i, entry := range req.Entries {
-		idx := prevLogIdx + i + 1
-		if idx >= len(c.log) {
+		idx := prevLogIdx + uint64(i) + 1
+		if idx >= c.realIdx {
 			if err := c.appendEntry(entry); err != nil {
 				c.mu.Unlock()
 				resp.Success = false
 				return &resp, err
 			}
-		} else if entry.Term != c.log[idx].Term {
-			c.log = c.log[:idx]
+		} else if entry.Term != c.log[idx-c.snapshotIndex+1].Term {
+			c.log = c.log[:idx-c.snapshotIndex+1]
 			if err := c.appendEntry(entry); err != nil {
 				c.mu.Unlock()
 				resp.Success = false
@@ -603,7 +610,7 @@ func (c *ConsensusModule) advanceCommitIndex() {
 	commitIdx := c.commitIndex
 	c.mu.Unlock()
 	for i := commitIdx + 1; i < c.realIdx; i++ {
-		if c.log[i].Term == int32(c.currentTerm) {
+		if c.log[i-c.snapshotIndex+1].Term == int32(c.currentTerm) {
 			count := 1
 			for _, peer := range c.peers {
 				if peer.ID == c.id {
@@ -634,7 +641,7 @@ func (c *ConsensusModule) applyCommits() {
 	c.mu.Lock()
 	for c.lastApplied < c.commitIndex {
 		c.lastApplied++
-		entry := c.log[c.lastApplied]
+		entry := c.log[c.lastApplied-c.snapshotIndex+1]
 		var cfg configChange
 		if err := json.Unmarshal(entry.Command, &cfg); err == nil {
 			if entry.Term == int32(c.currentTerm) && c.state == Leader {
@@ -735,19 +742,27 @@ func (c *ConsensusModule) loadFromSnapshot() {
 	if err != nil {
 		panic(err)
 	}
-	err = c.sm.RestoreFromSnapshot(s.Data)
+	err = c.restoreFromSnapshot(s)
 	if err != nil {
 		panic(err)
+	}
+}
+
+func (c *ConsensusModule) restoreFromSnapshot(s *pb.Snapshot) error {
+	err := c.sm.RestoreFromSnapshot(s.Data)
+	if err != nil {
+		return err
 	}
 	c.lastApplied = s.Metadata.Index
 	c.commitIndex = s.Metadata.Index
 	c.snapshotIndex = s.Metadata.Index
 	c.snapshotTerm = int(s.Metadata.Term)
+	return nil
 }
 
 func (c *ConsensusModule) createSnapshot() {
 	c.mu.Lock()
-	snapTerm := c.log[c.lastApplied-c.snapshotIndex].Term
+	snapTerm := c.log[c.lastApplied-c.snapshotIndex+1].Term
 	snap := &pb.Snapshot{
 		Metadata: &pb.Snapshot_Metadata{
 			Term:  snapTerm,
