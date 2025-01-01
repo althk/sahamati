@@ -667,7 +667,7 @@ func (c *ConsensusModule) appendEntry(entry *pb.LogEntry) error {
 	if err != nil {
 		return err
 	}
-	err = c.wal.Put(fmt.Sprintf("log:%d", c.realIdx), b)
+	err = c.wal.Put(fmt.Sprintf("log:%d", entry.RealIdx), b)
 	if err != nil {
 		return err
 	}
@@ -754,7 +754,6 @@ func (c *ConsensusModule) restoreFromSnapshot(s *pb.Snapshot) error {
 		return err
 	}
 	c.lastApplied = s.Metadata.Index
-	c.commitIndex = s.Metadata.Index
 	c.snapshotIndex = s.Metadata.Index
 	c.snapshotTerm = int(s.Metadata.Term)
 	return nil
@@ -784,7 +783,15 @@ func (c *ConsensusModule) createSnapshot() {
 		c.mu.Unlock()
 		return
 	}
-
+	var k string
+	for k = range c.wal.EntriesBetween("log:", fmt.Sprintf("log:%d", c.lastApplied)) {
+		if err := c.wal.Delete(k); err != nil {
+			c.logger.Warn("WARN: could not delete key from WAL during compaction",
+				slog.String("error", err.Error()),
+				slog.String("key", k),
+			)
+		}
+	}
 	c.log = c.log[c.lastApplied-c.snapshotIndex+1:]
 	c.snapshotIndex = c.lastApplied
 	c.snapshotTerm = int(snapTerm)
