@@ -1,16 +1,22 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"github.com/althk/sahamati/network/server"
 	"github.com/althk/sahamati/snapshotter"
+	"github.com/go-chi/chi/v5"
+	"golang.org/x/sync/errgroup"
+	"os"
+	"os/signal"
 	"path"
 	"strings"
 )
 
 var (
-	addr     = flag.String("addr", ":6001", "raft node address")
-	allNodes = flag.String("nodes", "", `comma separated list of all nodes in this cluster, 
+	raft_addr = flag.String("raft_addr", ":6001", "raft node address")
+	kvs_addr  = flag.String("kvstore_addr", ":8000", "KV Store address")
+	allNodes  = flag.String("nodes", "", `comma separated list of all nodes in this cluster, 
 including the current host, in the form 'host1:port1,host2:port2'`)
 	h2c           = flag.Bool("no_tls", false, "whether to use HTTP2 WITHOUT TLS (via h2c)")
 	join          = flag.Bool("join", false, "join an already running cluster (skip election)")
@@ -26,10 +32,10 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	sm := &kvs{m: make(map[string]string)}
+	sm := NewKVStore()
 	cfg := &server.ClusterConfig{
 		ClusterAddrs:  strings.Split(*allNodes, ","),
-		Addr:          *addr,
+		Addr:          *raft_addr,
 		WALDir:        *walDir,
 		JoinCluster:   *join,
 		MaxLogEntries: *maxLogEntries,
@@ -41,8 +47,22 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	err = srv.Serve()
-	if err != nil {
+
+	kvHttp := NewHTTPServer(*kvs_addr, "/kvs", sm)
+	r := chi.NewRouter()
+	r.Mount("/kvs", kvHttp.Routes())
+
+	ctx, done := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer done()
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		return srv.Serve(ctx)
+	})
+	g.Go(func() error {
+		return kvHttp.Serve(ctx)
+	})
+	if err = g.Wait(); err != nil {
 		panic(err)
 	}
 }
