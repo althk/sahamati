@@ -13,22 +13,22 @@ HOSTS=$(addprefix localhost:,${PORTS})
 # Generate a CSV for the cluster combining all hosts (localhost:6001,localhost:6002,...)
 CLUSTER="$(shell echo $(HOSTS) | tr ' ' ',')"
 
-.PHONY: proto start stop
+.PHONY: proto run_example stop_example
 
 proto:
 	@buf lint
 	@buf generate
 
-start:
+run_example:
 	@echo "starting $(CLUSTER_SIZE) nodes"
 	@echo "cluster = $(CLUSTER)"
 	@for i in $(HOSTS); do \
   		echo "starting node $$i"; \
-  		go run ./cmd/server --addr $$i --nodes $(CLUSTER) & \
+  		go run ./example/kvstore --addr $$i --nodes $(CLUSTER) & \
   	done
 
 # `go run` spawns a child process for each invocation.
 # We get the PIDs of the `go run` cmds and kill all child processes to stop the run.
-stop:
+stop_example:
 	@echo "stopping all nodes"
-	@pkill -SIGINT -P $(shell pgrep -f "go run ./cmd/server" | tr \\n , | sed 's/,$$//')
+	@pkill -SIGINT -P $(shell pgrep -f "go run ./example/kvstore" | tr \\n , | sed 's/,$$//')
