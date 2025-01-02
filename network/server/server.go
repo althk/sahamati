@@ -18,7 +18,6 @@ import (
 	"math/big"
 	"net/http"
 	"os"
-	"os/signal"
 	"path"
 	"strings"
 )
@@ -131,19 +130,22 @@ func newHTTPServer(addr string, cm consensusModule, h2c bool, logger *slog.Logge
 	return httpServer
 }
 
-func (srv *RaftHTTP) Serve() error {
-	ctx, done := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer done()
-
+func (srv *RaftHTTP) Serve(ctx context.Context) error {
+	shutdownCh := make(chan struct{})
 	go func(ctx context.Context) {
 		<-ctx.Done()
 		srv.logger.Info("shutting down")
-		_ = srv.httpServer.Shutdown(ctx)
+		if err := srv.httpServer.Shutdown(ctx); err != nil {
+			srv.logger.Error("error shutting down", "err", err)
+			_ = srv.httpServer.Close()
+		}
+		close(shutdownCh)
 	}(ctx)
 
 	err := srv.httpServer.ListenAndServeTLS("", "")
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+	<-shutdownCh
 	return nil
 }
