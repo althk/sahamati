@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/althk/sahamati/network"
+	"github.com/althk/sahamati/network/client"
 	pb "github.com/althk/sahamati/proto/v1"
 	"github.com/althk/wal"
 	"google.golang.org/protobuf/proto"
@@ -55,13 +55,13 @@ type peerClient interface {
 	AppendEntries(ctx context.Context, req *pb.AppendEntriesRequest) (*pb.AppendEntriesResponse, error)
 }
 
-type stateMachine interface {
+type StateMachine interface {
 	ApplyEntries(entries []*pb.LogEntry) error
 	CreateSnapshot(snapshotIndex uint64) ([]byte, error)
 	RestoreFromSnapshot(data []byte) error
 }
 
-type snapshotter interface {
+type Snapshotter interface {
 	Load() (*pb.Snapshot, error)
 	Save(*pb.Snapshot) error
 	HasData() bool
@@ -69,7 +69,7 @@ type snapshotter interface {
 
 func getRPCClient(peer Peer) peerClient {
 	if peer.Client == nil {
-		peer.Client = network.NewCMClient(peer.Addr, false)
+		peer.Client = client.NewCMClient(peer.Addr, false)
 	}
 	return peer.Client
 }
@@ -105,8 +105,8 @@ type ConsensusModule struct {
 	peerMu         map[int]*sync.Mutex
 	once           sync.Once
 	logger         *slog.Logger
-	sm             stateMachine
-	snapper        snapshotter
+	sm             StateMachine
+	snapper        Snapshotter
 	wal            *wal.WAL
 	leaderID       int
 	joinCluster    bool
@@ -116,8 +116,11 @@ type ConsensusModule struct {
 	currentLogSize int
 }
 
-func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, snapper snapshotter,
-	wal *wal.WAL, sm stateMachine, join bool, maxLogEntries int) *ConsensusModule {
+func NewConsensusModule(
+	id int, peers map[int]Peer,
+	sm StateMachine, snapper Snapshotter,
+	maxLogEntries int, join bool, w *wal.WAL,
+	logger *slog.Logger) *ConsensusModule {
 	return &ConsensusModule{
 		id:            id,
 		votedFor:      -1,
@@ -126,7 +129,7 @@ func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, snapper
 		currentTerm:   0,
 		peers:         peers,
 		logger:        logger,
-		wal:           wal,
+		wal:           w,
 		aeReadyCh:     make(chan bool),
 		cfgCommitCh:   make(chan configChange),
 		doneCh:        make(chan bool),

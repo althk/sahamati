@@ -1,4 +1,4 @@
-package network
+package server
 
 import (
 	"connectrpc.com/connect"

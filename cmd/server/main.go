@@ -1,20 +1,12 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
-	"github.com/althk/sahamati/network"
+	"github.com/althk/sahamati/network/server"
 	pb "github.com/althk/sahamati/proto/v1"
-	"github.com/althk/sahamati/raft"
 	"github.com/althk/sahamati/snapshotter"
-	"github.com/althk/wal"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
 	"path"
 	"strings"
 )
@@ -33,53 +25,27 @@ including the current host, in the form 'host1:port1,host2:port2'`)
 func main() {
 	flag.Parse()
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-
-	peers := make(map[int]raft.Peer)
-	raftID := -1
-
-	for i, peerAddr := range strings.Split(*allNodes, ",") {
-		if peerAddr == *addr {
-			raftID = i + 1
-		}
-		peers[i+1] = raft.Peer{
-			ID:     i + 1,
-			Addr:   peerAddr,
-			Client: network.NewCMClient(peerAddr, false),
-		}
-	}
-
 	snapper, err := snapshotter.NewLocalFile(path.Join(*snapshotDir, "snapshot.bin"))
 	if err != nil {
-		logger.Error("error initializing snapshotter", err)
 		panic(err)
 	}
-	walPath := path.Join(*walDir, strings.Replace(*addr, ":", "_", -1))
-	w, err := wal.New(walPath)
-	logger = logger.With(slog.Int("id", raftID))
+	sm := &kvs{m: make(map[string]string)}
+	cfg := &server.ClusterConfig{
+		ClusterAddrs:  strings.Split(*allNodes, ","),
+		Addr:          *addr,
+		WALDir:        *walDir,
+		JoinCluster:   *join,
+		MaxLogEntries: *maxLogEntries,
+		Snapper:       snapper,
+		SM:            sm,
+		H2c:           *h2c,
+	}
+	srv, err := server.NewRaftHTTP(cfg)
 	if err != nil {
-		logger.Error("error initializing WAL", "err", err)
 		panic(err)
 	}
-	cm := raft.NewConsensusModule(
-		raftID, peers, logger, snapper,
-		w, &kvs{m: make(map[string]string)}, *join,
-		*maxLogEntries,
-	)
-
-	httpServer := network.NewHTTPServer(*addr, cm, *h2c, logger)
-
-	ctx, done := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer done()
-
-	go func(ctx context.Context) {
-		<-ctx.Done()
-		logger.Info("shutting down")
-		_ = httpServer.Shutdown(ctx)
-	}(ctx)
-
-	err = httpServer.ListenAndServeTLS("", "")
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+	err = srv.Serve()
+	if err != nil {
 		panic(err)
 	}
 }
