@@ -112,30 +112,33 @@ type ConsensusModule struct {
 	joinCluster    bool
 	removingMember bool
 	addingMember   bool
+	maxLogEntries  int
+	currentLogSize int
 }
 
 func NewConsensusModule(id int, peers map[int]Peer, logger *slog.Logger, snapper snapshotter,
-	wal *wal.WAL, sm stateMachine, join bool) *ConsensusModule {
+	wal *wal.WAL, sm stateMachine, join bool, maxLogEntries int) *ConsensusModule {
 	return &ConsensusModule{
-		id:          id,
-		votedFor:    -1,
-		realIdx:     0,
-		log:         make([]*pb.LogEntry, 0),
-		currentTerm: 0,
-		peers:       peers,
-		logger:      logger,
-		wal:         wal,
-		aeReadyCh:   make(chan bool),
-		cfgCommitCh: make(chan configChange),
-		doneCh:      make(chan bool),
-		nextIndex:   make(map[int]uint64),
-		matchIndex:  make(map[int]uint64),
-		snapper:     snapper,
-		sm:          sm,
-		commitIndex: 0,
-		lastApplied: 0,
-		joinCluster: join,
-		peerMu:      make(map[int]*sync.Mutex),
+		id:            id,
+		votedFor:      -1,
+		realIdx:       0,
+		log:           make([]*pb.LogEntry, 0),
+		currentTerm:   0,
+		peers:         peers,
+		logger:        logger,
+		wal:           wal,
+		aeReadyCh:     make(chan bool),
+		cfgCommitCh:   make(chan configChange),
+		doneCh:        make(chan bool),
+		nextIndex:     make(map[int]uint64),
+		matchIndex:    make(map[int]uint64),
+		snapper:       snapper,
+		sm:            sm,
+		commitIndex:   0,
+		lastApplied:   0,
+		joinCluster:   join,
+		peerMu:        make(map[int]*sync.Mutex),
+		maxLogEntries: max(maxLogEntries, 100000),
 	}
 }
 
@@ -677,6 +680,10 @@ func (c *ConsensusModule) appendEntry(entry *pb.LogEntry) error {
 		return err
 	}
 	c.log = append(c.log, entry)
+	c.currentLogSize++
+	if c.currentLogSize >= c.maxLogEntries {
+		go c.compactLog()
+	}
 	return nil
 }
 
@@ -766,7 +773,10 @@ func (c *ConsensusModule) restoreFromSnapshot(s *pb.Snapshot) error {
 
 func (c *ConsensusModule) createSnapshot() {
 	c.mu.Lock()
-	snapTerm := c.log[c.lastApplied-c.snapshotIndex+1].Term
+	lastApplied := c.lastApplied
+	snapshotIndex := c.snapshotIndex
+	snapTerm := c.log[c.lastApplied-snapshotIndex+1].Term
+	c.mu.Unlock()
 	snap := &pb.Snapshot{
 		Metadata: &pb.Snapshot_Metadata{
 			Term:  snapTerm,
@@ -774,33 +784,36 @@ func (c *ConsensusModule) createSnapshot() {
 		},
 	}
 	var err error
-	snap.Data, err = c.sm.CreateSnapshot(c.lastApplied)
+	snap.Data, err = c.sm.CreateSnapshot(lastApplied)
 	if err != nil {
 		c.logger.Error("FAILED: state machine snapshot creation",
 			slog.Uint64("lastApplied", c.lastApplied),
 			slog.String("error", err.Error()))
-		c.mu.Unlock()
 		return
 	}
 	if err = c.snapper.Save(snap); err != nil {
 		c.logger.Error("FAILED: could not persist snapshot",
 			slog.String("error", err.Error()))
-		c.mu.Unlock()
 		return
 	}
 	var k string
-	for k = range c.wal.EntriesBetween("log:", fmt.Sprintf("log:%d", c.lastApplied)) {
-		// TODO: add batch delete to WAL
-		if err := c.wal.Delete(k); err != nil {
-			c.logger.Warn("WARN: could not delete key from WAL during compaction",
-				slog.String("error", err.Error()),
-				slog.String("key", k),
-			)
+	go func() {
+		for k = range c.wal.EntriesBetween(fmt.Sprintf("log:%d", snapshotIndex),
+			fmt.Sprintf("log:%d", lastApplied)) {
+			// TODO: add batch delete to WAL
+			if err := c.wal.Delete(k); err != nil {
+				c.logger.Warn("WARN: could not delete key from WAL during compaction",
+					slog.String("error", err.Error()),
+					slog.String("key", k),
+				)
+			}
 		}
-	}
-	c.log = c.log[c.lastApplied-c.snapshotIndex+1:]
-	c.snapshotIndex = c.lastApplied
+	}()
+	c.mu.Lock()
+	c.log = c.log[lastApplied-snapshotIndex+1:]
+	c.snapshotIndex = lastApplied
 	c.snapshotTerm = int(snapTerm)
+	c.currentLogSize = len(c.log)
 	c.mu.Unlock()
 }
 
@@ -981,6 +994,10 @@ func (c *ConsensusModule) loadFromWAL(key string, prop any) error {
 		return err
 	}
 	return nil
+}
+
+func (c *ConsensusModule) compactLog() {
+	c.createSnapshot()
 }
 
 func electionTimeout() time.Duration {
