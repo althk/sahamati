@@ -582,9 +582,9 @@ func (c *ConsensusModule) logState() {
 	}
 }
 
-func (c *ConsensusModule) cmState() (id int, currentTerm int, votedFor int,
-	commitIndex uint64, lastApplied uint64, state State) {
-	return c.id, c.currentTerm, c.votedFor, c.commitIndex, c.lastApplied, c.state
+func (c *ConsensusModule) Info() (id int, currentTerm int, votedFor int,
+	commitIndex uint64, lastApplied uint64, state State, leaderID int) {
+	return c.id, c.currentTerm, c.votedFor, c.commitIndex, c.lastApplied, c.state, c.leaderID
 }
 
 func (c *ConsensusModule) Propose(cmd []byte) uint64 {
