@@ -152,8 +152,8 @@ func (c *ConsensusModule) getPeerMutex(id int) *sync.Mutex {
 func (c *ConsensusModule) Init() {
 	if c.snapper.HasData() {
 		c.loadFromSnapshot()
-		// TODO: c.loadFromWAL()
 	}
+	c.restoreFromWAL()
 	if !c.joinCluster {
 		c.becomeFollower(c.currentTerm)
 	}
@@ -667,7 +667,12 @@ func (c *ConsensusModule) appendEntry(entry *pb.LogEntry) error {
 	if err != nil {
 		return err
 	}
-	err = c.wal.Put(fmt.Sprintf("log:%d", entry.RealIdx), b)
+	batch := make(map[string][]byte)
+	batch[fmt.Sprintf("log:%d", entry.RealIdx)] = b
+	if realIdxBytes, err := json.Marshal(c.realIdx); err == nil {
+		batch["realIdx"] = realIdxBytes
+	}
+	err = c.wal.PutBatch(batch)
 	if err != nil {
 		return err
 	}
@@ -785,6 +790,7 @@ func (c *ConsensusModule) createSnapshot() {
 	}
 	var k string
 	for k = range c.wal.EntriesBetween("log:", fmt.Sprintf("log:%d", c.lastApplied)) {
+		// TODO: add batch delete to WAL
 		if err := c.wal.Delete(k); err != nil {
 			c.logger.Warn("WARN: could not delete key from WAL during compaction",
 				slog.String("error", err.Error()),
@@ -937,6 +943,44 @@ func (c *ConsensusModule) RemoveMember(ctx context.Context, req *pb.RemoveMember
 
 func (c *ConsensusModule) isMembershipChangeInProgress() bool {
 	return c.removingMember || c.addingMember
+}
+
+func (c *ConsensusModule) restoreFromWAL() {
+	if err := c.loadFromWAL("realIdx", &c.realIdx); err != nil && !errors.Is(err, wal.ErrKeyNotFound) {
+		panic(err)
+	}
+	if err := c.loadFromWAL("commitIndex", &c.commitIndex); err != nil && !errors.Is(err, wal.ErrKeyNotFound) {
+		panic(err)
+	}
+	if err := c.loadFromWAL("term", &c.currentTerm); err != nil && !errors.Is(err, wal.ErrKeyNotFound) {
+		panic(err)
+	}
+	if err := c.loadFromWAL("votedFor", &c.votedFor); err != nil && !errors.Is(err, wal.ErrKeyNotFound) {
+		panic(err)
+	}
+	if c.realIdx < 1 {
+		return
+	}
+	for _, v := range c.wal.EntriesBetween(fmt.Sprintf("log:%d", c.lastApplied),
+		fmt.Sprintf("log:%d", c.realIdx+1)) {
+		var entry *pb.LogEntry
+		err := proto.Unmarshal(v, entry)
+		if err != nil {
+			panic(err)
+		}
+		c.log = append(c.log, entry)
+	}
+}
+
+func (c *ConsensusModule) loadFromWAL(key string, prop any) error {
+	b, err := c.wal.Get(key)
+	if err != nil {
+		return err
+	}
+	if err = json.Unmarshal(b, prop); err != nil {
+		return err
+	}
+	return nil
 }
 
 func electionTimeout() time.Duration {
