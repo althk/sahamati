@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	raft_addr = flag.String("raft_addr", ":6001", "raft node address")
-	kvs_addr  = flag.String("kvstore_addr", ":8000", "KV Store address")
-	allNodes  = flag.String("nodes", "", `comma separated list of all nodes in this cluster, 
+	raftAddr = flag.String("raft_addr", ":6001", "raft node address")
+	kvsAddr  = flag.String("kvstore_addr", ":8000", "KV Store address")
+	allNodes = flag.String("nodes", "", `comma separated list of all nodes in this cluster, 
 including the current host, in the form 'host1:port1,host2:port2'`)
 	h2c           = flag.Bool("no_tls", false, "whether to use HTTP2 WITHOUT TLS (via h2c)")
 	join          = flag.Bool("join", false, "join an already running cluster (skip election)")
@@ -35,7 +35,7 @@ func main() {
 	sm := NewKVStore()
 	cfg := &server.ClusterConfig{
 		ClusterAddrs:  strings.Split(*allNodes, ","),
-		Addr:          *raft_addr,
+		Addr:          *raftAddr,
 		WALDir:        *walDir,
 		JoinCluster:   *join,
 		MaxLogEntries: *maxLogEntries,
@@ -48,7 +48,7 @@ func main() {
 		panic(err)
 	}
 
-	kvHttp := NewHTTPServer(*kvs_addr, "/kvs", sm)
+	kvHttp := NewHTTPServer(*kvsAddr, "/kvs", sm)
 	r := chi.NewRouter()
 	r.Mount("/kvs", kvHttp.Routes())
 
