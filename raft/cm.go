@@ -255,7 +255,7 @@ func (c *ConsensusModule) lastLogIndexAndTerm() (uint64, int) {
 func (c *ConsensusModule) sendVoteRequest(peer Peer, term int, idx uint64, logTerm int) {
 	c.getPeerMutex(peer.ID).Lock()
 	defer c.getPeerMutex(peer.ID).Unlock()
-	client := getRPCClient(peer)
+	cli := getRPCClient(peer)
 	c.logger.Debug("sending vote request", slog.String("peer", peer.Addr))
 	c.mu.Lock()
 	if c.state != Candidate || term != c.currentTerm || c.id != c.votedFor {
@@ -269,7 +269,7 @@ func (c *ConsensusModule) sendVoteRequest(peer Peer, term int, idx uint64, logTe
 		LastLogTerm: int32(logTerm),
 	}
 	c.mu.Unlock()
-	resp, err := client.RequestVote(context.TODO(), &req)
+	resp, err := cli.RequestVote(context.TODO(), &req)
 	if err != nil {
 		// handle error
 		return
@@ -370,7 +370,7 @@ func (c *ConsensusModule) sendAppendEntriesToPeer(peer Peer, savedTerm int, hear
 		c.getPeerMutex(peer.ID).Lock()
 		defer c.getPeerMutex(peer.ID).Unlock()
 	}
-	client := getRPCClient(peer)
+	cli := getRPCClient(peer)
 	c.mu.Lock()
 	prevLogIdx := uint64(0)
 	prevLogTerm := -1
@@ -400,7 +400,7 @@ func (c *ConsensusModule) sendAppendEntriesToPeer(peer Peer, savedTerm int, hear
 	}
 	c.mu.Unlock()
 
-	resp, err := client.AppendEntries(context.TODO(), &req)
+	resp, err := cli.AppendEntries(context.TODO(), &req)
 	if err != nil {
 		return
 	}
