@@ -91,6 +91,8 @@ func (k *KVStore) CreateSnapshot(_ uint64) ([]byte, error) {
 }
 
 func (k *KVStore) RestoreFromSnapshot(data []byte) error {
+	k.logger.Info("restoring state from snapshot",
+		slog.Int("size-MB", len(data)/(1024*1024)))
 	err := json.Unmarshal(data, &k.store)
 	if err != nil {
 		return err
@@ -101,7 +103,7 @@ func (k *KVStore) RestoreFromSnapshot(data []byte) error {
 func (k *KVStore) Start(proposeCB func(cmd []byte) (uint64, error)) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	k.logger.Info("Ready to accept requests")
+	k.logger.Info("ready to accept requests")
 	k.proposeCB = proposeCB
 	k.ready = true
 }

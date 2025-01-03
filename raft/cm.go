@@ -157,7 +157,9 @@ func (c *ConsensusModule) getPeerMutex(id int) *sync.Mutex {
 }
 
 func (c *ConsensusModule) Init() {
+	c.logger.Info("initializing ConsensusModule")
 	if c.snapper.HasData() {
+		c.logger.Info("snapshot exists, loading data from snapshot")
 		c.loadFromSnapshot()
 	}
 	c.restoreFromWAL()
@@ -614,6 +616,7 @@ func (c *ConsensusModule) Propose(cmd []byte) (uint64, error) {
 }
 
 func (c *ConsensusModule) advanceCommitIndex() {
+	c.logger.Info("advancing commit index")
 	c.mu.Lock()
 	commitIdx := c.commitIndex
 	c.mu.Unlock()
@@ -734,8 +737,14 @@ func (c *ConsensusModule) appendToWAL(key string, val any) error {
 func (c *ConsensusModule) applyConfigChange(cfg configChange) {
 	switch cfg.Type {
 	case AddMember:
+		c.logger.Info("adding new peer to cluster",
+			slog.Int("peer-id", cfg.ID), slog.String("peer-addr", cfg.Addr),
+		)
 		c.peers[cfg.ID] = Peer{ID: cfg.ID, Addr: cfg.Addr}
 	case RemoveMember:
+		c.logger.Info("removing peer from cluster",
+			slog.Int("peer-id", cfg.ID), slog.String("peer-addr", cfg.Addr),
+		)
 		delete(c.peers, cfg.ID)
 		if cfg.ID == c.id {
 			c.Shutdown()
@@ -744,6 +753,7 @@ func (c *ConsensusModule) applyConfigChange(cfg configChange) {
 }
 
 func (c *ConsensusModule) Shutdown() {
+	c.logger.Info("shutting down raft node")
 	c.state = Dead
 	c.once.Do(func() {
 		close(c.doneCh)
@@ -773,6 +783,8 @@ func (c *ConsensusModule) restoreFromSnapshot(s *pb.Snapshot) error {
 	c.lastApplied = s.Metadata.Index
 	c.snapshotIndex = s.Metadata.Index
 	c.snapshotTerm = int(s.Metadata.Term)
+	c.logger.Info("restored from snapshot",
+		slog.Uint64("snapshot-index", c.snapshotIndex))
 	return nil
 }
 
@@ -973,6 +985,7 @@ func (c *ConsensusModule) isMembershipChangeInProgress() bool {
 }
 
 func (c *ConsensusModule) restoreFromWAL() {
+	c.logger.Info("Restoring previous state from WAL")
 	if err := c.loadFromWAL("realIdx", &c.realIdx); err != nil && !errors.Is(err, wal.ErrKeyNotFound) {
 		panic(err)
 	}
@@ -997,6 +1010,11 @@ func (c *ConsensusModule) restoreFromWAL() {
 		}
 		c.log = append(c.log, entry)
 	}
+	c.logger.Info("Loaded hard state and log entries from WAL",
+		slog.Int("count", len(c.log)),
+		slog.Uint64("commitIndex", c.commitIndex),
+		slog.Uint64("realIndex", c.realIdx),
+	)
 }
 
 func (c *ConsensusModule) loadFromWAL(key string, prop any) error {
