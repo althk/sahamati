@@ -587,11 +587,11 @@ func (c *ConsensusModule) Info() (id int, currentTerm int, votedFor int,
 	return c.id, c.currentTerm, c.votedFor, c.commitIndex, c.lastApplied, c.state, c.leaderID
 }
 
-func (c *ConsensusModule) Propose(cmd []byte) uint64 {
+func (c *ConsensusModule) Propose(cmd []byte) (uint64, error) {
 	c.mu.Lock()
 	if c.state != Leader {
 		c.mu.Unlock()
-		return 0
+		return 0, ErrNodeNotLeader
 	}
 	c.realIdx++
 	entry := &pb.LogEntry{
@@ -603,12 +603,12 @@ func (c *ConsensusModule) Propose(cmd []byte) uint64 {
 	if err != nil {
 		c.realIdx--
 		c.mu.Unlock()
-		return 0
+		return 0, err
 	}
 
 	c.mu.Unlock()
 	c.aeReadyCh <- true
-	return c.realIdx
+	return c.realIdx, nil
 }
 
 func (c *ConsensusModule) advanceCommitIndex() {
@@ -867,7 +867,12 @@ func (c *ConsensusModule) AddMember(ctx context.Context, req *pb.AddMemberReques
 	c.nextIndex[int(req.NodeId)] = 1
 	c.matchIndex[int(req.NodeId)] = 0
 	c.mu.Unlock()
-	idx := c.Propose(cmd)
+	idx, err := c.Propose(cmd)
+	if err != nil {
+		resp.Status = false
+		c.mu.Unlock()
+		return resp, err
+	}
 	c.logger.Info("AddMember RPC proposed log index",
 		slog.String("req", fmt.Sprintf("%v", req)),
 		slog.Uint64("idx", idx),
@@ -937,8 +942,12 @@ func (c *ConsensusModule) RemoveMember(ctx context.Context, req *pb.RemoveMember
 		return resp, err
 	}
 	c.mu.Unlock()
-	idx := c.Propose(cmd)
-
+	idx, err := c.Propose(cmd)
+	if err != nil {
+		resp.Status = false
+		c.mu.Unlock()
+		return resp, err
+	}
 	c.logger.Info("RemoveMember RPC proposed log index",
 		slog.String("node-id", fmt.Sprintf("%v", req.NodeId)),
 		slog.Uint64("idx", idx),
