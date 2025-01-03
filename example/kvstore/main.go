@@ -35,7 +35,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	sm := NewKVStore()
+	sm := NewKVStore(logger.With(slog.String("svc", "kvstore")))
 	cfg := &server.ClusterConfig{
 		ClusterAddrs:  strings.Split(*allNodes, ","),
 		Addr:          *raftAddr,

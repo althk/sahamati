@@ -19,7 +19,7 @@ type HTTPServer struct {
 	logger   *slog.Logger
 }
 
-func NewHTTPServer(addr, mntPoint string, store *KVStore) *HTTPServer {
+func NewHTTPServer(addr, mntPoint string, store *KVStore, logger *slog.Logger) *HTTPServer {
 	return &HTTPServer{
 		addr:     addr,
 		mntPoint: mntPoint,
@@ -67,7 +67,11 @@ func (s *HTTPServer) Routes() chi.Router {
 
 func (s *HTTPServer) Get(w http.ResponseWriter, r *http.Request) {
 	key := chi.URLParam(r, "key")
-	v, ok := s.store.Get(key)
+	v, ok, err := s.store.Get(key)
+	if err != nil && errors.Is(err, ErrStoreNotReady) {
+		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+		return
+	}
 	if !ok {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
@@ -83,12 +87,15 @@ func (s *HTTPServer) Put(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	_, ok := s.store.Get(key)
+	_, ok, err := s.store.Get(key)
 	if !ok {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	}
-	s.store.Put(key, string(value))
+	err = s.store.Put(key, string(value))
+	if err != nil && errors.Is(err, ErrStoreNotReady) {
+		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+	}
 }
 
 func (s *HTTPServer) Post(w http.ResponseWriter, r *http.Request) {
@@ -104,5 +111,15 @@ func (s *HTTPServer) Post(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error(err.Error())
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
+	}
+	key, value := e["key"], e["value"]
+	_, ok, err := s.store.Get(key)
+	if ok {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	err = s.store.Put(key, value)
+	if err != nil && errors.Is(err, ErrStoreNotReady) {
+		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 	}
 }
