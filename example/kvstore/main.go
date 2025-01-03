@@ -52,7 +52,8 @@ func main() {
 		panic(err)
 	}
 
-	kvHttp := NewHTTPServer(*kvsAddr, "/kvs", sm)
+	kvHttp := NewHTTPServer(*kvsAddr, "/kvs", sm,
+		logger.With(slog.String("svc", "kvstore_http")))
 	r := chi.NewRouter()
 	r.Mount("/kvs", kvHttp.Routes())
 
