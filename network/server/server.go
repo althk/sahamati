@@ -17,7 +17,6 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
-	"os"
 	"path"
 	"strings"
 )
@@ -27,11 +26,11 @@ type ClusterConfig struct {
 	Addr          string
 	Snapper       raft.Snapshotter
 	WALDir        string
-	LogDir        string
 	JoinCluster   bool
 	MaxLogEntries int
 	SM            raft.StateMachine
 	H2c           bool
+	Logger        *slog.Logger
 }
 
 type RaftHTTP struct {
@@ -55,7 +54,7 @@ func NewRaftHTTP(cfg *ClusterConfig) (*RaftHTTP, error) {
 		cfg: cfg,
 	}
 	peers := make(map[int]raft.Peer)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
 	for i, peerAddr := range cfg.ClusterAddrs {
 		if peerAddr == cfg.Addr {
 			srv.nodeID = i + 1
@@ -68,7 +67,7 @@ func NewRaftHTTP(cfg *ClusterConfig) (*RaftHTTP, error) {
 	}
 	walPath := path.Join(cfg.WALDir, strings.Replace(cfg.Addr, ":", "_", -1))
 	w, err := wal.New(walPath)
-	srv.logger = logger.With(slog.Int("id", srv.nodeID))
+	srv.logger = cfg.Logger.With(slog.Int("id", srv.nodeID))
 	if err != nil {
 		srv.logger.Error("error initializing WAL", "err", err)
 		return nil, err

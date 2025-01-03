@@ -7,6 +7,7 @@ import (
 	"github.com/althk/sahamati/snapshotter"
 	"github.com/go-chi/chi/v5"
 	"golang.org/x/sync/errgroup"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path"
@@ -28,6 +29,8 @@ including the current host, in the form 'host1:port1,host2:port2'`)
 func main() {
 	flag.Parse()
 
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
 	snapper, err := snapshotter.NewLocalFile(path.Join(*snapshotDir, "snapshot.bin"))
 	if err != nil {
 		panic(err)
@@ -42,6 +45,7 @@ func main() {
 		Snapper:       snapper,
 		SM:            sm,
 		H2c:           *h2c,
+		Logger:        logger.With(slog.String("svc", "raft")),
 	}
 	srv, err := server.NewRaftHTTP(cfg)
 	if err != nil {
