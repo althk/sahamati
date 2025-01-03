@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"github.com/althk/sahamati/network/server"
 	"github.com/althk/sahamati/snapshotter"
 	"github.com/go-chi/chi/v5"
@@ -31,7 +32,10 @@ func main() {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	snapper, err := snapshotter.NewLocalFile(path.Join(*snapshotDir, "snapshot.bin"))
+	snapper, err := snapshotter.NewLocalFile(
+		path.Join(*snapshotDir,
+			fmt.Sprintf("snapshot_%s.bin", strings.Replace(*raftAddr, ":", "_", -1)),
+		))
 	if err != nil {
 		panic(err)
 	}
