@@ -376,14 +376,14 @@ func (c *ConsensusModule) sendAppendEntriesToPeer(peer Peer, savedTerm int, hear
 	prevLogTerm := -1
 	entries := make([]*pb.LogEntry, 0)
 
-	if !heartbeat {
-		ni := c.nextIndex[peer.ID]
-		if ni <= c.snapshotIndex {
+	ni := c.nextIndex[peer.ID]
+	if !heartbeat && int(ni-c.snapshotIndex) < len(c.log) {
+		if c.snapshotIndex > 0 && ni <= c.snapshotIndex {
 			// TODO: if ni <= c.snapshotIndex, issue InstallSnapshot RPC
 			c.mu.Unlock()
 			return
 		} else {
-			prevLogIdx = ni - 1
+			prevLogIdx = max(0, ni-1)
 			if prevLogIdx > 0 {
 				prevLogTerm = int(c.log[prevLogIdx-c.snapshotIndex+1].Term)
 			}
@@ -499,18 +499,25 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 	c.mu.Unlock()
 
 	if req.PrevLogIdx > 0 &&
-		(req.PrevLogIdx >= c.realIdx || req.PrevLogTerm != c.log[req.PrevLogIdx-c.snapshotIndex+1].Term) {
+		(req.PrevLogIdx > c.realIdx || req.PrevLogTerm != c.log[req.PrevLogIdx-c.snapshotIndex+1].Term) {
 		resp.Success = false
 		return &resp, nil
 	}
 
 	resp.Success = true
+	c.mu.Lock()
+	c.leaderID = int(req.LeaderId)
+	mustApply := false
+	if req.LeaderCommitIdx > c.commitIndex {
+		if err := c.setCommitIndex(req.LeaderCommitIdx); err != nil {
+			c.commitIndex = req.LeaderCommitIdx
+		}
+		mustApply = true
+	}
+	c.mu.Unlock()
 
 	if len(req.Entries) == 0 {
 		// heartbeat
-		c.mu.Lock()
-		c.leaderID = int(req.LeaderId)
-		c.mu.Unlock()
 		return &resp, nil
 	}
 
@@ -542,14 +549,7 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 		}
 	}
 	c.realIdx = c.log[len(c.log)-1].RealIdx
-	mustApply := false
-	if req.LeaderCommitIdx > c.commitIndex {
-		if err := c.setCommitIndex(min(req.LeaderCommitIdx, c.realIdx)); err != nil {
-			c.commitIndex = min(req.LeaderCommitIdx, c.realIdx)
-		}
-		mustApply = true
-	}
-	c.leaderID = int(req.LeaderId)
+
 	c.mu.Unlock()
 	if mustApply {
 		c.applyCommits()
