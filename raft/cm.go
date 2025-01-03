@@ -59,6 +59,7 @@ type StateMachine interface {
 	ApplyEntries(entries []*pb.LogEntry) error
 	CreateSnapshot(snapshotIndex uint64) ([]byte, error)
 	RestoreFromSnapshot(data []byte) error
+	Start(proposeCB func(cmd []byte) (uint64, error))
 }
 
 type Snapshotter interface {
@@ -163,6 +164,7 @@ func (c *ConsensusModule) Init() {
 	if !c.joinCluster {
 		c.becomeFollower(c.currentTerm)
 	}
+	c.sm.Start(c.Propose)
 	go c.logState()
 }
 
