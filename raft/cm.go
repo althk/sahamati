@@ -319,8 +319,8 @@ func (c *ConsensusModule) becomeLeader() {
 		if peer.ID == c.id {
 			continue
 		}
-		c.nextIndex[peer.ID] = c.realIdx
-		c.matchIndex[peer.ID] = 0
+		c.nextIndex[peer.ID] = c.commitIndex + 1
+		c.matchIndex[peer.ID] = c.commitIndex
 	}
 
 	c.aeReadyCh = make(chan bool)
