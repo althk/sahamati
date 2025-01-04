@@ -69,7 +69,8 @@ func NewRaftHTTP(cfg *ClusterConfig) (*RaftHTTP, error) {
 	}
 	walPath := path.Join(cfg.WALDir, strings.Replace(cfg.Addr, ":", "_", -1))
 	w, err := wal.New(walPath)
-	srv.logger = cfg.Logger.With(slog.Int("id", srv.nodeID))
+	srv.logger = cfg.Logger.With(slog.Int("id", srv.nodeID)).With(
+		slog.String("svc", "raft-http"))
 	if err != nil {
 		srv.logger.Error("error initializing WAL", "err", err)
 		return nil, err
@@ -77,7 +78,7 @@ func NewRaftHTTP(cfg *ClusterConfig) (*RaftHTTP, error) {
 	srv.cm = raft.NewConsensusModule(
 		srv.nodeID, peers, cfg.SM, cfg.Snapper,
 		cfg.MaxLogEntries, cfg.JoinCluster,
-		w, srv.logger,
+		w, srv.logger.With(slog.String("svc", "raft-cm")),
 	)
 	srv.httpServer = newHTTPServer(srv.cfg.Addr, srv.cm, cfg.H2c, srv.logger)
 	return srv, nil
@@ -151,5 +152,6 @@ func (srv *RaftHTTP) Serve(ctx context.Context) error {
 		return err
 	}
 	<-shutdownCh
+	srv.logger.Info("raft-http shut down complete")
 	return nil
 }
