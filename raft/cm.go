@@ -548,7 +548,9 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 			}
 		}
 		var cfg configChange
-		if err := json.Unmarshal(entry.Command, &cfg); err == nil {
+		d := json.NewDecoder(bytes.NewReader(entry.Command))
+		d.DisallowUnknownFields()
+		if err := d.Decode(&cfg); err == nil {
 			c.applyConfigChange(cfg)
 		}
 	}
