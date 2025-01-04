@@ -171,7 +171,7 @@ func (c *ConsensusModule) Init() {
 }
 
 func (c *ConsensusModule) runElectionTimer() {
-	c.electionTimeout = electionTimeout()
+	c.electionTimeout = c.newElectionTimeout()
 	t := time.NewTicker(10 * time.Millisecond)
 	c.mu.Lock()
 	termStarted := c.currentTerm
@@ -1032,7 +1032,8 @@ func (c *ConsensusModule) compactLog() {
 	c.createSnapshot()
 }
 
-func electionTimeout() time.Duration {
+func (c *ConsensusModule) newElectionTimeout() time.Duration {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	return time.Duration(150+rng.Intn(151)) * time.Millisecond
+	millis := 150 + min(150, rng.Intn(151)*(c.id/10))
+	return time.Duration(millis) * time.Millisecond
 }
