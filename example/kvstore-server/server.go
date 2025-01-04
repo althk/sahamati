@@ -10,6 +10,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"time"
 )
 
 type HTTPServer struct {
@@ -38,8 +39,10 @@ func (s *HTTPServer) Serve(ctx context.Context) error {
 	go func(ctx context.Context) {
 		<-ctx.Done()
 		s.logger.Info("Shutting down kvstore http server")
-		if err := srv.Shutdown(context.Background()); err != nil {
-			s.logger.Error("Error shutting down kvstore http server", err)
+		tCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(tCtx); err != nil {
+			s.logger.Error("Error shutting down kvstore http server, force closing", err)
 			_ = srv.Close()
 		}
 		close(shutdownCh)
