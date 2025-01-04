@@ -118,8 +118,16 @@ func (s *HTTPServer) Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
+	s.logger.Info("POST request", slog.String("key", key), slog.String("value", value))
 	err = s.store.Put(key, value)
-	if err != nil && errors.Is(err, ErrStoreNotReady) {
-		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+	if err != nil {
+		if errors.Is(err, ErrStoreNotReady) {
+			http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
+	w.WriteHeader(http.StatusCreated)
+	_, _ = w.Write([]byte("OK"))
 }

@@ -39,6 +39,7 @@ func (k *KVStore) Put(key, value string) error {
 	if err != nil {
 		return err
 	}
+	k.logger.Info("Waiting for consensus")
 	<-ch
 	k.store[key] = value
 	return nil
@@ -49,6 +50,7 @@ func (k *KVStore) propose(key, value string) (<-chan struct{}, error) {
 	e["key"] = key
 	e["value"] = value
 	b, _ := json.Marshal(e)
+	k.logger.Info("Proposing key=%s value=%s", key, value)
 	id, err := k.proposeCB(b)
 	if err != nil {
 		return nil, err
