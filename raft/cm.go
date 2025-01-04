@@ -564,7 +564,7 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 }
 
 func (c *ConsensusModule) logState() {
-	t := time.NewTicker(8 * time.Second)
+	t := time.NewTicker(30 * time.Second)
 	for {
 		select {
 		case _, ok := <-c.doneCh:
@@ -573,7 +573,7 @@ func (c *ConsensusModule) logState() {
 				return
 			}
 		case <-t.C:
-			c.mu.Lock()
+			c.mu.RLock()
 			c.logger.Info("CM Status",
 				slog.String("currentTerm", fmt.Sprintf("%v", c.currentTerm)),
 				slog.String("votedFor", fmt.Sprintf("%v", c.votedFor)),
@@ -583,7 +583,7 @@ func (c *ConsensusModule) logState() {
 				slog.String("commit-idx", fmt.Sprintf("%v", c.commitIndex)),
 				slog.String("last-applied", fmt.Sprintf("%v", c.lastApplied)),
 			)
-			c.mu.Unlock()
+			c.mu.RUnlock()
 		}
 	}
 }
