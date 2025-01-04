@@ -621,9 +621,8 @@ func (c *ConsensusModule) advanceCommitIndex() {
 	c.logger.Info("advancing commit index")
 	c.mu.Lock()
 	commitIdx := c.commitIndex
-	c.mu.Unlock()
-	for i := commitIdx + 1; i < c.realIdx; i++ {
-		if c.log[i-c.snapshotIndex+1].Term == int32(c.currentTerm) {
+	for i := commitIdx + 1; i <= c.realIdx; i++ {
+		if c.log[i-(c.snapshotIndex+1)].Term == int32(c.currentTerm) {
 			count := 1
 			for _, peer := range c.peers {
 				if peer.ID == c.id {
@@ -634,16 +633,22 @@ func (c *ConsensusModule) advanceCommitIndex() {
 				}
 			}
 			if count > len(c.peers)/2 {
-				c.mu.Lock()
 				c.commitIndex = i
 				c.mu.Unlock()
 			}
 		}
 	}
+	c.logger.Info("advanced commit index",
+		slog.Uint64("commit-index", c.commitIndex),
+		slog.Uint64("prev-commit-index", commitIdx),
+	)
 	if commitIdx < c.commitIndex {
+		c.mu.Unlock()
 		c.applyCommits()
 		c.aeReadyCh <- true
+		return
 	}
+	c.mu.Unlock()
 }
 
 func (c *ConsensusModule) applyCommits() {
