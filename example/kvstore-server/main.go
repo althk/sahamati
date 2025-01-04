@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/althk/sahamati/network/server"
 	"github.com/althk/sahamati/snapshotter"
-	"github.com/go-chi/chi/v5"
 	"golang.org/x/sync/errgroup"
 	"log/slog"
 	"os"
@@ -58,8 +57,6 @@ func main() {
 
 	kvHttp := NewHTTPServer(*kvsAddr, "/kvs", sm,
 		logger.With(slog.String("svc", "kvstore_http")))
-	r := chi.NewRouter()
-	r.Mount("/kvs", kvHttp.Routes())
 
 	ctx, done := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer done()
