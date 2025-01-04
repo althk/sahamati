@@ -1010,12 +1010,12 @@ func (c *ConsensusModule) restoreFromWAL() {
 	}
 	for _, v := range c.wal.EntriesBetween(fmt.Sprintf("log:%d", c.lastApplied),
 		fmt.Sprintf("log:%d", c.realIdx+1)) {
-		var entry *pb.LogEntry
-		err := proto.Unmarshal(v, entry)
+		var entry pb.LogEntry
+		err := proto.Unmarshal(v, &entry)
 		if err != nil {
 			panic(err)
 		}
-		c.log = append(c.log, entry)
+		c.log = append(c.log, &entry)
 	}
 	c.logger.Info("Loaded hard state and log entries from WAL",
 		slog.Int("count", len(c.log)),
