@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"time"
 )
 
 type ClusterConfig struct {
@@ -43,6 +44,7 @@ type RaftHTTP struct {
 
 type consensusModule interface {
 	Init()
+	Shutdown()
 	HandleVoteRequest(context.Context, *cmv1.RequestVoteRequest) (*cmv1.RequestVoteResponse, error)
 	HandleAppendEntriesRequest(context.Context, *cmv1.AppendEntriesRequest) (*cmv1.AppendEntriesResponse, error)
 	AddMember(context.Context, *cmv1.AddMemberRequest) (*cmv1.AddMemberResponse, error)
@@ -134,8 +136,11 @@ func (srv *RaftHTTP) Serve(ctx context.Context) error {
 	go func(ctx context.Context) {
 		<-ctx.Done()
 		srv.logger.Info("shutting down")
-		if err := srv.httpServer.Shutdown(ctx); err != nil {
-			srv.logger.Error("error shutting down", "err", err)
+		srv.cm.Shutdown()
+		tCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
+		defer cancel()
+		if err := srv.httpServer.Shutdown(tCtx); err != nil {
+			srv.logger.Error("could not perform graceful shut down, closing active connections", "err", err)
 			_ = srv.httpServer.Close()
 		}
 		close(shutdownCh)
