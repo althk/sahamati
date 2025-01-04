@@ -634,7 +634,6 @@ func (c *ConsensusModule) advanceCommitIndex() {
 			}
 			if count > len(c.peers)/2 {
 				c.commitIndex = i
-				c.mu.Unlock()
 			}
 		}
 	}
