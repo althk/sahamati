@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -207,6 +208,7 @@ func (c *ConsensusModule) runElectionTimer() {
 }
 
 func (c *ConsensusModule) becomeFollower(term int) {
+	c.logger.Info("becoming follower", slog.Int("term", term))
 	c.mu.Lock()
 	c.state = Follower
 	err := c.setCurrentTerm(term)
@@ -381,17 +383,24 @@ func (c *ConsensusModule) sendAppendEntriesToPeer(peer Peer, savedTerm int, hear
 	entries := make([]*pb.LogEntry, 0)
 
 	ni := c.nextIndex[peer.ID]
-	if !heartbeat && int(ni-c.snapshotIndex) < len(c.log) {
+	if !heartbeat && int(ni-c.snapshotIndex) <= len(c.log) {
+		c.logger.Info("Checking AE entries for peer", slog.Int("peer-id", peer.ID),
+			slog.Uint64("ni", ni))
 		if c.snapshotIndex > 0 && ni <= c.snapshotIndex {
 			// TODO: if ni <= c.snapshotIndex, issue InstallSnapshot RPC
 			c.mu.Unlock()
 			return
 		} else {
-			prevLogIdx = max(0, ni-1)
-			if prevLogIdx > 0 {
-				prevLogTerm = int(c.log[prevLogIdx-c.snapshotIndex+1].Term)
+			if ni > 0 {
+				prevLogIdx = ni - 1
 			}
-			entries = c.log[ni-c.snapshotIndex+1:]
+			if prevLogIdx > 0 {
+				prevLogTerm = int(c.log[prevLogIdx-(c.snapshotIndex+1)].Term)
+			}
+			entries = c.log[ni-(c.snapshotIndex+1):]
+			c.logger.Info("Sending AEs", slog.Int("peer-id", peer.ID),
+				slog.Int("entries", len(entries)), slog.Int("log-size", len(c.log)),
+				slog.Uint64("ni", ni))
 		}
 	}
 	req := pb.AppendEntriesRequest{
@@ -408,10 +417,10 @@ func (c *ConsensusModule) sendAppendEntriesToPeer(peer Peer, savedTerm int, hear
 	if err != nil {
 		return
 	}
-	c.processAppendEntriesResponse(&req, resp, peer)
+	c.processAppendEntriesResponse(&req, resp, peer, heartbeat)
 }
 
-func (c *ConsensusModule) processAppendEntriesResponse(req *pb.AppendEntriesRequest, resp *pb.AppendEntriesResponse, peer Peer) {
+func (c *ConsensusModule) processAppendEntriesResponse(req *pb.AppendEntriesRequest, resp *pb.AppendEntriesResponse, peer Peer, hb bool) {
 
 	if resp.Term > req.Term {
 		c.becomeFollower(int(resp.Term))
@@ -419,8 +428,13 @@ func (c *ConsensusModule) processAppendEntriesResponse(req *pb.AppendEntriesRequ
 	}
 
 	c.mu.Lock()
+	if !hb {
+		c.logger.Info("processing AE response", slog.Int("peer-id", peer.ID),
+			slog.Int("count", len(req.Entries)))
+	}
 	if c.state == Leader && resp.Term == req.Term {
 		if !resp.Success {
+			c.logger.Warn("peer AE rpc failed", slog.Int("peer-id", peer.ID))
 			c.nextIndex[peer.ID] = req.PrevLogIdx
 			c.mu.Unlock()
 			return
@@ -503,7 +517,7 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 	c.mu.Unlock()
 
 	if req.PrevLogIdx > 0 &&
-		(req.PrevLogIdx > c.realIdx || req.PrevLogTerm != c.log[req.PrevLogIdx-c.snapshotIndex+1].Term) {
+		(req.PrevLogIdx > c.realIdx || req.PrevLogTerm != c.log[req.PrevLogIdx-(c.snapshotIndex+1)].Term) {
 		resp.Success = false
 		return &resp, nil
 	}
@@ -533,14 +547,14 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 	c.mu.Lock()
 	for i, entry := range req.Entries {
 		idx := prevLogIdx + uint64(i) + 1
-		if idx >= c.realIdx {
+		if idx > c.realIdx {
 			if err := c.appendEntry(entry); err != nil {
 				c.mu.Unlock()
 				resp.Success = false
 				return &resp, err
 			}
-		} else if entry.Term != c.log[idx-c.snapshotIndex+1].Term {
-			c.log = c.log[:idx-c.snapshotIndex+1]
+		} else if entry.Term != c.log[idx-(c.snapshotIndex+1)].Term {
+			c.log = c.log[:idx-(c.snapshotIndex+1)]
 			if err := c.appendEntry(entry); err != nil {
 				c.mu.Unlock()
 				resp.Success = false
@@ -599,19 +613,18 @@ func (c *ConsensusModule) Propose(cmd []byte) (uint64, error) {
 		c.mu.Unlock()
 		return 0, ErrNodeNotLeader
 	}
-	c.realIdx++
 	entry := &pb.LogEntry{
 		Command: cmd,
 		Term:    int32(c.currentTerm),
 		RealIdx: c.realIdx,
 	}
+	c.logger.Info("Proposing entry", slog.Uint64("real-index", entry.RealIdx))
 	err := c.appendEntry(entry)
 	if err != nil {
-		c.realIdx--
 		c.mu.Unlock()
 		return 0, err
 	}
-
+	c.realIdx++
 	c.mu.Unlock()
 	c.aeReadyCh <- true
 	return c.realIdx, nil
@@ -658,7 +671,7 @@ func (c *ConsensusModule) applyCommits() {
 	c.mu.Lock()
 	for c.lastApplied < c.commitIndex {
 		c.lastApplied++
-		entry := c.log[c.lastApplied-c.snapshotIndex+1]
+		entry := c.log[c.lastApplied-(c.snapshotIndex+1)]
 		var cfg configChange
 		if err := json.Unmarshal(entry.Command, &cfg); err == nil {
 			if entry.Term == int32(c.currentTerm) && c.state == Leader {
