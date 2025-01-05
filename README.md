@@ -26,3 +26,8 @@ Sahamati addresses this issue taking a simple approach based on node IDs in the 
   and vote for this other candidate.
 * since node IDs are unique and monotonic in a cluster, this helps mitigate split vote issue to a great extent without the need
   for additional latency/complexity introduced by pre-votes or other network based approaches.
+
+In addition to that, Sahamati implements the election timeout with the following tweak:
+
+* the timeout scales based on the node ID (max timeout is still 300ms), this way, nodes with smaller
+IDs have a higher chance of getting smaller election timeouts
