@@ -14,8 +14,8 @@ var (
 
 type KVStore struct {
 	store     map[string]string
-	respMap   map[uint64]chan struct{}
-	proposeCB func(cmd []byte) (uint64, error)
+	respMap   map[int64]chan struct{}
+	proposeCB func(cmd []byte) (int64, error)
 	ready     bool
 	mu        sync.Mutex
 	logger    *slog.Logger
@@ -24,7 +24,7 @@ type KVStore struct {
 func NewKVStore(logger *slog.Logger) *KVStore {
 	return &KVStore{
 		store:   make(map[string]string),
-		respMap: make(map[uint64]chan struct{}),
+		respMap: make(map[int64]chan struct{}),
 		logger:  logger,
 	}
 }
@@ -52,6 +52,7 @@ func (k *KVStore) propose(key, value string) (<-chan struct{}, error) {
 	b, _ := json.Marshal(e)
 	k.logger.Info("Proposing key", key, value)
 	id, err := k.proposeCB(b)
+	k.logger.Info("Proposed key", key, value, "realIdx", id)
 	if err != nil {
 		return nil, err
 	}
@@ -69,6 +70,7 @@ func (k *KVStore) Get(key string) (string, bool, error) {
 }
 
 func (k *KVStore) ApplyEntries(entries []*pb.LogEntry) error {
+	k.logger.Info("Applying entries", "count", len(entries))
 	for _, e := range entries {
 		var entry map[string]string
 		err := json.Unmarshal(e.Command, &entry)
@@ -76,6 +78,7 @@ func (k *KVStore) ApplyEntries(entries []*pb.LogEntry) error {
 			k.logger.Warn("error unmarshalling entry:", err)
 			continue
 		}
+		k.logger.Info("Applying entry", entry["key"], entry["value"], "realIdx", e.RealIdx)
 		k.store[entry["key"]] = entry["value"]
 		if ch, ok := k.respMap[e.RealIdx]; ok {
 			close(ch)
@@ -84,7 +87,7 @@ func (k *KVStore) ApplyEntries(entries []*pb.LogEntry) error {
 	return nil
 }
 
-func (k *KVStore) CreateSnapshot(_ uint64) ([]byte, error) {
+func (k *KVStore) CreateSnapshot(_ int64) ([]byte, error) {
 	b, err := json.Marshal(k.store)
 	if err != nil {
 		return nil, err
@@ -102,7 +105,7 @@ func (k *KVStore) RestoreFromSnapshot(data []byte) error {
 	return nil
 }
 
-func (k *KVStore) Start(proposeCB func(cmd []byte) (uint64, error)) {
+func (k *KVStore) Start(proposeCB func(cmd []byte) (int64, error)) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	k.logger.Info("ready to accept requests")

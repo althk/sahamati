@@ -6,7 +6,7 @@ option go_package = "github.com/althk/sahamati/proto/v1;cmv1";
 message LogEntry {
   int32 term = 1;
   bytes command = 2;
-  uint64 real_idx = 3;
+  int64 real_idx = 3;
 }
 
 message PersistentState {
@@ -18,7 +18,7 @@ message PersistentState {
 message Snapshot {
   message Metadata {
     int32 term = 1;
-    uint64 index = 2;
+    int64 index = 2;
   }
   Metadata metadata = 1;
   bytes data = 2;
@@ -27,7 +27,7 @@ message Snapshot {
 message RequestVoteRequest {
   int32 term = 1;
   int32 candidate_id = 2;
-  uint64 last_log_idx = 3;
+  int64 last_log_idx = 3;
   int32 last_log_term = 4;
 }
 
@@ -39,9 +39,9 @@ message RequestVoteResponse {
 message AppendEntriesRequest {
   int32 term = 1;
   int32 leader_id = 2;
-  uint64 prev_log_idx = 3;
+  int64 prev_log_idx = 3;
   int32 prev_log_term = 4;
-  uint64 leader_commit_idx =5;
+  int64 leader_commit_idx =5;
   repeated LogEntry entries = 6;
 }
 

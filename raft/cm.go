@@ -58,9 +58,9 @@ type peerClient interface {
 
 type StateMachine interface {
 	ApplyEntries(entries []*pb.LogEntry) error
-	CreateSnapshot(snapshotIndex uint64) ([]byte, error)
+	CreateSnapshot(snapshotIndex int64) ([]byte, error)
 	RestoreFromSnapshot(data []byte) error
-	Start(proposeCB func(cmd []byte) (uint64, error))
+	Start(proposeCB func(cmd []byte) (int64, error))
 }
 
 type Snapshotter interface {
@@ -85,19 +85,19 @@ type ConsensusModule struct {
 	currentTerm int
 	votedFor    int
 	log         []*pb.LogEntry
-	realIdx     uint64
+	realIdx     int64
 
 	votesReceived   int
 	electionTimeout time.Duration
 	electionReset   time.Time
 	heartbeatTicker *time.Ticker
 
-	commitIndex   uint64
-	lastApplied   uint64
-	snapshotIndex uint64
+	commitIndex   int64
+	lastApplied   int64
+	snapshotIndex int64
 	snapshotTerm  int
-	nextIndex     map[int]uint64
-	matchIndex    map[int]uint64
+	nextIndex     map[int]int64
+	matchIndex    map[int]int64
 
 	aeReadyCh   chan bool
 	cfgCommitCh chan configChange // used to notify internally for add/remove node rpc
@@ -126,21 +126,23 @@ func NewConsensusModule(
 	return &ConsensusModule{
 		id:            id,
 		votedFor:      -1,
-		realIdx:       0,
 		log:           make([]*pb.LogEntry, 0),
-		currentTerm:   0,
+		currentTerm:   -1,
 		peers:         peers,
 		logger:        logger,
 		wal:           w,
 		aeReadyCh:     make(chan bool),
 		cfgCommitCh:   make(chan configChange),
 		doneCh:        make(chan bool),
-		nextIndex:     make(map[int]uint64),
-		matchIndex:    make(map[int]uint64),
+		nextIndex:     make(map[int]int64),
+		matchIndex:    make(map[int]int64),
 		snapper:       snapper,
 		sm:            sm,
-		commitIndex:   0,
-		lastApplied:   0,
+		realIdx:       -1,
+		commitIndex:   -1,
+		lastApplied:   -1,
+		snapshotIndex: -1,
+		snapshotTerm:  -1,
 		joinCluster:   join,
 		peerMu:        make(map[int]*sync.Mutex),
 		maxLogEntries: max(maxLogEntries, 100000),
@@ -251,14 +253,14 @@ func (c *ConsensusModule) startElection() {
 	go c.runElectionTimer()
 }
 
-func (c *ConsensusModule) lastLogIndexAndTerm() (uint64, int) {
-	if c.realIdx == 0 {
-		return 0, -1
+func (c *ConsensusModule) lastLogIndexAndTerm() (int64, int) {
+	if len(c.log) == 0 {
+		return c.snapshotIndex, c.snapshotTerm
 	}
-	return c.realIdx, int(c.log[len(c.log)-1].Term)
+	return c.realIdx - 1, int(c.log[len(c.log)-1].Term)
 }
 
-func (c *ConsensusModule) sendVoteRequest(peer Peer, term int, idx uint64, logTerm int) {
+func (c *ConsensusModule) sendVoteRequest(peer Peer, term int, idx int64, logTerm int) {
 	c.getPeerMutex(peer.ID).Lock()
 	defer c.getPeerMutex(peer.ID).Unlock()
 	cli := getRPCClient(peer)
@@ -378,29 +380,29 @@ func (c *ConsensusModule) sendAppendEntriesToPeer(peer Peer, savedTerm int, hear
 	}
 	cli := getRPCClient(peer)
 	c.mu.Lock()
-	prevLogIdx := uint64(0)
+	prevLogIdx := int64(-1)
 	prevLogTerm := -1
 	entries := make([]*pb.LogEntry, 0)
 
 	ni := c.nextIndex[peer.ID]
 	if !heartbeat && int(ni-c.snapshotIndex) <= len(c.log) {
 		c.logger.Info("Checking AE entries for peer", slog.Int("peer-id", peer.ID),
-			slog.Uint64("ni", ni))
-		if c.snapshotIndex > 0 && ni <= c.snapshotIndex {
+			slog.Int64("ni", ni))
+		if c.snapshotIndex >= 0 && ni <= c.snapshotIndex {
 			// TODO: if ni <= c.snapshotIndex, issue InstallSnapshot RPC
 			c.mu.Unlock()
 			return
 		} else {
-			if ni > 0 {
+			if ni >= 0 {
 				prevLogIdx = ni - 1
 			}
-			if prevLogIdx > 0 {
+			if prevLogIdx >= 0 {
 				prevLogTerm = int(c.log[prevLogIdx-(c.snapshotIndex+1)].Term)
 			}
 			entries = c.log[ni-(c.snapshotIndex+1):]
 			c.logger.Info("Sending AEs", slog.Int("peer-id", peer.ID),
 				slog.Int("entries", len(entries)), slog.Int("log-size", len(c.log)),
-				slog.Uint64("ni", ni))
+				slog.Int64("ni", ni))
 		}
 	}
 	req := pb.AppendEntriesRequest{
@@ -441,12 +443,12 @@ func (c *ConsensusModule) processAppendEntriesResponse(req *pb.AppendEntriesRequ
 		}
 
 		if len(req.Entries) > 0 {
-			c.nextIndex[peer.ID] += uint64(len(req.Entries))
+			c.nextIndex[peer.ID] += int64(len(req.Entries))
 			c.matchIndex[peer.ID] = max(c.nextIndex[peer.ID]-1, 0)
 			c.logger.Info("AppendEntries completed, updating index",
 				slog.String("peer", peer.Addr),
-				slog.Uint64("nextIndex", c.nextIndex[peer.ID]),
-				slog.Uint64("matchIndex", c.matchIndex[peer.ID]),
+				slog.Int64("nextIndex", c.nextIndex[peer.ID]),
+				slog.Int64("matchIndex", c.matchIndex[peer.ID]),
 			)
 			c.mu.Unlock()
 			c.advanceCommitIndex()
@@ -530,7 +532,7 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 		return &resp, nil
 	}
 
-	if req.PrevLogIdx > 0 &&
+	if req.PrevLogIdx >= 0 &&
 		(req.PrevLogIdx > c.realIdx || req.PrevLogTerm != c.log[req.PrevLogIdx-(c.snapshotIndex+1)].Term) {
 		resp.Success = false
 		return &resp, nil
@@ -540,12 +542,12 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 
 	c.logger.Info("Appending new entries",
 		slog.String("entries", fmt.Sprintf("%v", req.Entries)),
-		slog.Uint64("prevLogIdx", prevLogIdx),
-		slog.Uint64("realIdx", c.realIdx))
+		slog.Int64("prevLogIdx", prevLogIdx),
+		slog.Int64("realIdx", c.realIdx))
 
 	c.mu.Lock()
 	for i, entry := range req.Entries {
-		idx := prevLogIdx + uint64(i) + 1
+		idx := prevLogIdx + int64(i) + 1
 		if idx > c.realIdx {
 			if err := c.appendEntry(entry); err != nil {
 				c.mu.Unlock()
@@ -593,9 +595,9 @@ func (c *ConsensusModule) logState() {
 				slog.String("state", fmt.Sprintf("%v", c.state)),
 				slog.Int("raft-id", c.id),
 				slog.Int("leader-id", c.leaderID),
-				slog.Uint64("commit-idx", c.commitIndex),
-				slog.Uint64("last-applied", c.lastApplied),
-				slog.Uint64("real-idx", c.realIdx),
+				slog.Int64("commit-idx", c.commitIndex),
+				slog.Int64("last-applied", c.lastApplied),
+				slog.Int64("real-idx", c.realIdx),
 			)
 			c.mu.RUnlock()
 		}
@@ -603,29 +605,29 @@ func (c *ConsensusModule) logState() {
 }
 
 func (c *ConsensusModule) Info() (id int, currentTerm int, votedFor int,
-	commitIndex uint64, lastApplied uint64, state State, leaderID int) {
+	commitIndex int64, lastApplied int64, state State, leaderID int) {
 	return c.id, c.currentTerm, c.votedFor, c.commitIndex, c.lastApplied, c.state, c.leaderID
 }
 
-func (c *ConsensusModule) Propose(cmd []byte) (uint64, error) {
+func (c *ConsensusModule) Propose(cmd []byte) (int64, error) {
 	c.mu.Lock()
-	idx := c.realIdx
 	if c.state != Leader {
 		c.mu.Unlock()
-		return 0, ErrNodeNotLeader
+		return -1, ErrNodeNotLeader
 	}
+	c.realIdx++
+	idx := c.realIdx
 	entry := &pb.LogEntry{
 		Command: cmd,
 		Term:    int32(c.currentTerm),
 		RealIdx: idx,
 	}
-	c.logger.Info("Proposing entry", slog.Uint64("real-index", entry.RealIdx))
+	c.logger.Info("Proposing entry", slog.Int64("real-index", idx))
 	err := c.appendEntry(entry)
 	if err != nil {
 		c.mu.Unlock()
-		return 0, err
+		return -1, err
 	}
-	c.realIdx++
 	c.mu.Unlock()
 	c.aeReadyCh <- true
 	return idx, nil
@@ -652,13 +654,13 @@ func (c *ConsensusModule) advanceCommitIndex() {
 		}
 	}
 	c.logger.Info("advanced commit index",
-		slog.Uint64("commit-index", c.commitIndex),
-		slog.Uint64("prev-commit-index", commitIdx),
+		slog.Int64("commit-index", c.commitIndex),
+		slog.Int64("prev-commit-index", commitIdx),
 	)
 	if commitIdx < c.commitIndex {
 		c.mu.Unlock()
 		c.applyCommits()
-		c.aeReadyCh <- true
+		// c.aeReadyCh <- true
 		return
 	}
 	c.mu.Unlock()
@@ -667,8 +669,8 @@ func (c *ConsensusModule) advanceCommitIndex() {
 func (c *ConsensusModule) applyCommits() {
 	var entries []*pb.LogEntry
 	c.logger.Info("applying commits",
-		slog.Uint64("commitidx", c.commitIndex),
-		slog.Uint64("lastapplied", c.lastApplied))
+		slog.Int64("commitidx", c.commitIndex),
+		slog.Int64("lastapplied", c.lastApplied))
 	c.mu.Lock()
 	for c.lastApplied < c.commitIndex {
 		c.lastApplied++
@@ -688,8 +690,8 @@ func (c *ConsensusModule) applyCommits() {
 	err := c.sm.ApplyEntries(entries)
 	if err != nil {
 		c.logger.Error("FAILED: applying commits",
-			slog.Uint64("commitidx", c.commitIndex),
-			slog.Uint64("lastapplied", c.lastApplied))
+			slog.Int64("commitidx", c.commitIndex),
+			slog.Int64("lastapplied", c.lastApplied))
 	}
 }
 
@@ -733,7 +735,7 @@ func (c *ConsensusModule) setVotedFor(votedFor int) error {
 	return nil
 }
 
-func (c *ConsensusModule) setCommitIndex(commitIndex uint64) error {
+func (c *ConsensusModule) setCommitIndex(commitIndex int64) error {
 	err := c.appendToWAL("commitIndex", commitIndex)
 	if err != nil {
 		return err
@@ -804,7 +806,7 @@ func (c *ConsensusModule) restoreFromSnapshot(s *pb.Snapshot) error {
 	c.snapshotIndex = s.Metadata.Index
 	c.snapshotTerm = int(s.Metadata.Term)
 	c.logger.Info("restored from snapshot",
-		slog.Uint64("snapshot-index", c.snapshotIndex))
+		slog.Int64("snapshot-index", c.snapshotIndex))
 	return nil
 }
 
@@ -824,7 +826,7 @@ func (c *ConsensusModule) createSnapshot() {
 	snap.Data, err = c.sm.CreateSnapshot(lastApplied)
 	if err != nil {
 		c.logger.Error("FAILED: state machine snapshot creation",
-			slog.Uint64("lastApplied", c.lastApplied),
+			slog.Int64("lastApplied", c.lastApplied),
 			slog.String("error", err.Error()))
 		return
 	}
@@ -909,7 +911,7 @@ func (c *ConsensusModule) AddMember(ctx context.Context, req *pb.AddMemberReques
 	}
 	c.logger.Info("AddMember RPC proposed log index",
 		slog.String("req", fmt.Sprintf("%v", req)),
-		slog.Uint64("idx", idx),
+		slog.Int64("idx", idx),
 	)
 
 	select {
@@ -984,7 +986,7 @@ func (c *ConsensusModule) RemoveMember(ctx context.Context, req *pb.RemoveMember
 	}
 	c.logger.Info("RemoveMember RPC proposed log index",
 		slog.String("node-id", fmt.Sprintf("%v", req.NodeId)),
-		slog.Uint64("idx", idx),
+		slog.Int64("idx", idx),
 	)
 
 	select {
@@ -1018,11 +1020,7 @@ func (c *ConsensusModule) restoreFromWAL() {
 	if err := c.loadFromWAL("votedFor", &c.votedFor); err != nil && !errors.Is(err, wal.ErrKeyNotFound) {
 		panic(err)
 	}
-	c.realIdx++
-	if c.realIdx < 1 {
-		return
-	}
-	for _, v := range c.wal.EntriesBetween(fmt.Sprintf("log:%d", c.lastApplied),
+	for _, v := range c.wal.EntriesBetween(fmt.Sprintf("log:%d", c.snapshotIndex+1),
 		fmt.Sprintf("log:%d", c.realIdx+1)) {
 		var entry pb.LogEntry
 		err := proto.Unmarshal(v, &entry)
@@ -1033,8 +1031,8 @@ func (c *ConsensusModule) restoreFromWAL() {
 	}
 	c.logger.Info("Loaded hard state and log entries from WAL",
 		slog.Int("count", len(c.log)),
-		slog.Uint64("commitIndex", c.commitIndex),
-		slog.Uint64("realIndex", c.realIdx),
+		slog.Int64("commitIndex", c.commitIndex),
+		slog.Int64("realIndex", c.realIdx),
 	)
 }
 
