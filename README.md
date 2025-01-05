@@ -61,7 +61,7 @@ The above commands will print some basic information include the node that becam
 To test the above running cluster (assuming `localhost:6001` raft node is the leader)
 ```shell
 # send the request to the kvstore http service
-curl -X POST http://localhost:8001/kvs -d '{"sahamati": "सहमतिः"}'
+curl -X POST http://localhost:8001/kvs -d '{"key":"sahamati", "value": "सहमतिः"}'
 # the service should respond with `OK` if the Raft cluster committed the entry (majority of nodes accepted it). 
 ```
 To read the value back (from another node):
