@@ -589,13 +589,14 @@ func (c *ConsensusModule) logState() {
 		case <-t.C:
 			c.mu.RLock()
 			c.logger.Info("CM Status",
-				slog.String("currentTerm", fmt.Sprintf("%v", c.currentTerm)),
-				slog.String("votedFor", fmt.Sprintf("%v", c.votedFor)),
+				slog.Int("currentTerm", c.currentTerm),
+				slog.Int("votedFor", c.votedFor),
 				slog.String("state", fmt.Sprintf("%v", c.state)),
-				slog.String("raft-id", fmt.Sprintf("%v", c.id)),
-				slog.String("leader-id", fmt.Sprintf("%v", c.leaderID)),
-				slog.String("commit-idx", fmt.Sprintf("%v", c.commitIndex)),
-				slog.String("last-applied", fmt.Sprintf("%v", c.lastApplied)),
+				slog.Int("raft-id", c.id),
+				slog.Int("leader-id", c.leaderID),
+				slog.Uint64("commit-idx", c.commitIndex),
+				slog.Uint64("last-applied", c.lastApplied),
+				slog.Uint64("real-idx", c.realIdx),
 			)
 			c.mu.RUnlock()
 		}
