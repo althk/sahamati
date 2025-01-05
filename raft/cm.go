@@ -1018,6 +1018,7 @@ func (c *ConsensusModule) restoreFromWAL() {
 	if err := c.loadFromWAL("votedFor", &c.votedFor); err != nil && !errors.Is(err, wal.ErrKeyNotFound) {
 		panic(err)
 	}
+	c.realIdx++
 	if c.realIdx < 1 {
 		return
 	}
