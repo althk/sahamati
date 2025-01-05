@@ -69,3 +69,9 @@ To read the value back (from another node):
 curl -X GET http://localhost:8002/kvs/sahamati
 ```
 It should print the value we stored earlier.
+
+## TODOs (in no particular order)
+
+* Allow TLS certificate validation for Raft cluster nodes (incl mutual validation)
+* Optimize client communication by proxying request to the leader instead of rejecting a request
+* Use QUIC for Raft cluster communication (connect protocol supports it)
