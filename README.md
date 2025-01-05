@@ -70,6 +70,11 @@ curl -X GET http://localhost:8002/kvs/sahamati
 ```
 It should print the value we stored earlier.
 
+To stop the cluster:
+```shell
+make stop_example
+```
+
 ## TODOs (in no particular order)
 
 * Allow TLS certificate validation for Raft cluster nodes (incl mutual validation)
