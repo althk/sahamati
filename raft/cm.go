@@ -609,6 +609,7 @@ func (c *ConsensusModule) Info() (id int, currentTerm int, votedFor int,
 
 func (c *ConsensusModule) Propose(cmd []byte) (uint64, error) {
 	c.mu.Lock()
+	idx := c.realIdx
 	if c.state != Leader {
 		c.mu.Unlock()
 		return 0, ErrNodeNotLeader
@@ -616,7 +617,7 @@ func (c *ConsensusModule) Propose(cmd []byte) (uint64, error) {
 	entry := &pb.LogEntry{
 		Command: cmd,
 		Term:    int32(c.currentTerm),
-		RealIdx: c.realIdx,
+		RealIdx: idx,
 	}
 	c.logger.Info("Proposing entry", slog.Uint64("real-index", entry.RealIdx))
 	err := c.appendEntry(entry)
@@ -627,7 +628,7 @@ func (c *ConsensusModule) Propose(cmd []byte) (uint64, error) {
 	c.realIdx++
 	c.mu.Unlock()
 	c.aeReadyCh <- true
-	return c.realIdx, nil
+	return idx, nil
 }
 
 func (c *ConsensusModule) advanceCommitIndex() {
