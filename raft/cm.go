@@ -673,7 +673,7 @@ func (c *ConsensusModule) applyCommits() {
 		c.lastApplied++
 		entry := c.log[c.lastApplied-(c.snapshotIndex+1)]
 		var cfg configChange
-		if err := json.Unmarshal(entry.Command, &cfg); err == nil {
+		if err := json.Unmarshal(entry.Command, &cfg); err == nil && cfg.Addr != "" {
 			if entry.Term == int32(c.currentTerm) && c.state == Leader {
 				c.applyConfigChange(cfg)
 				c.cfgCommitCh <- cfg
