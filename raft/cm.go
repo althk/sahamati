@@ -502,8 +502,8 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 	c.mu.Lock()
 	resp.Term = int32(c.currentTerm)
 	c.electionReset = time.Now()
-
 	c.mu.Unlock()
+
 	if req.Term > resp.Term {
 		c.becomeFollower(int(req.Term))
 	}
@@ -512,18 +512,9 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 		return &resp, nil
 	}
 
-	c.mu.Lock()
-	c.state = Follower
-	c.mu.Unlock()
-
-	if req.PrevLogIdx > 0 &&
-		(req.PrevLogIdx > c.realIdx || req.PrevLogTerm != c.log[req.PrevLogIdx-(c.snapshotIndex+1)].Term) {
-		resp.Success = false
-		return &resp, nil
-	}
-
 	resp.Success = true
 	c.mu.Lock()
+	c.state = Follower
 	c.leaderID = int(req.LeaderId)
 	mustApply := false
 	if req.LeaderCommitIdx > c.commitIndex {
@@ -539,10 +530,18 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 		return &resp, nil
 	}
 
+	if req.PrevLogIdx > 0 &&
+		(req.PrevLogIdx > c.realIdx || req.PrevLogTerm != c.log[req.PrevLogIdx-(c.snapshotIndex+1)].Term) {
+		resp.Success = false
+		return &resp, nil
+	}
+
 	prevLogIdx := req.PrevLogIdx
 
 	c.logger.Info("Appending new entries",
-		slog.String("entries", fmt.Sprintf("%v", req.Entries)))
+		slog.String("entries", fmt.Sprintf("%v", req.Entries)),
+		slog.Uint64("prevLogIdx", prevLogIdx),
+		slog.Uint64("realIdx", c.realIdx))
 
 	c.mu.Lock()
 	for i, entry := range req.Entries {
@@ -569,8 +568,8 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 		}
 	}
 	c.realIdx = c.log[len(c.log)-1].RealIdx
-
 	c.mu.Unlock()
+
 	if mustApply {
 		c.applyCommits()
 	}
