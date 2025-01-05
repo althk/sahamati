@@ -166,6 +166,7 @@ func (c *ConsensusModule) Init() {
 		c.loadFromSnapshot()
 	}
 	c.restoreFromWAL()
+	c.applyCommits() // ensure state machine has the remaining data on top of the snapshot
 	if !c.joinCluster {
 		c.becomeFollower(c.currentTerm)
 	}
@@ -526,6 +527,9 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 		mustApply = true
 	}
 	c.mu.Unlock()
+	if mustApply {
+		go c.applyCommits()
+	}
 
 	if len(req.Entries) == 0 {
 		// heartbeat
@@ -572,9 +576,6 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 	c.realIdx = c.log[len(c.log)-1].RealIdx
 	c.mu.Unlock()
 
-	if mustApply {
-		c.applyCommits()
-	}
 	return &resp, nil
 }
 
@@ -649,7 +650,9 @@ func (c *ConsensusModule) advanceCommitIndex() {
 				}
 			}
 			if count > len(c.peers)/2 {
-				c.commitIndex = i
+				if err := c.setCommitIndex(i); err != nil {
+					c.commitIndex = i
+				}
 			}
 		}
 	}
@@ -704,6 +707,8 @@ func (c *ConsensusModule) appendEntry(entry *pb.LogEntry) error {
 	batch[fmt.Sprintf("log:%d", entry.RealIdx)] = b
 	if realIdxBytes, err := json.Marshal(c.realIdx); err == nil {
 		batch["realIdx"] = realIdxBytes
+	} else {
+		c.logger.Warn("FAILED: marshaling realIdx", c.realIdx)
 	}
 	err = c.wal.PutBatch(batch)
 	if err != nil {
@@ -1020,19 +1025,22 @@ func (c *ConsensusModule) restoreFromWAL() {
 	if err := c.loadFromWAL("votedFor", &c.votedFor); err != nil && !errors.Is(err, wal.ErrKeyNotFound) {
 		panic(err)
 	}
-	for _, v := range c.wal.EntriesBetween(fmt.Sprintf("log:%d", c.snapshotIndex+1),
-		fmt.Sprintf("log:%d", c.realIdx+1)) {
+	for _, v := range c.wal.EntriesWithPrefix("log:") {
 		var entry pb.LogEntry
 		err := proto.Unmarshal(v, &entry)
 		if err != nil {
 			panic(err)
 		}
-		c.log = append(c.log, &entry)
+		if entry.RealIdx > c.snapshotIndex {
+			c.log = append(c.log, &entry)
+		}
 	}
+	c.realIdx = c.log[len(c.log)-1].RealIdx
+	c.currentLogSize = len(c.log)
 	c.logger.Info("Loaded hard state and log entries from WAL",
-		slog.Int("count", len(c.log)),
-		slog.Int64("commitIndex", c.commitIndex),
-		slog.Int64("realIndex", c.realIdx),
+		slog.Int("log-size", c.currentLogSize),
+		slog.Int64("commit-index", c.commitIndex),
+		slog.Int64("real-index", c.realIdx),
 	)
 }
 
