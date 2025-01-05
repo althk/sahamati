@@ -42,7 +42,8 @@ func (s *HTTPServer) Serve(ctx context.Context) error {
 		tCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(tCtx); err != nil {
-			s.logger.Error("Error shutting down kvstore http server, force closing", err)
+			s.logger.Error("Error shutting down kvstore http server, force closing",
+				"err", err.Error())
 			_ = srv.Close()
 		}
 		close(shutdownCh)

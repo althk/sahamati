@@ -50,7 +50,7 @@ func (k *KVStore) propose(key, value string) (<-chan struct{}, error) {
 	e["key"] = key
 	e["value"] = value
 	b, _ := json.Marshal(e)
-	k.logger.Info("Proposing key=%s value=%s", key, value)
+	k.logger.Info("Proposing key", key, value)
 	id, err := k.proposeCB(b)
 	if err != nil {
 		return nil, err
