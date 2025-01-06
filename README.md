@@ -32,7 +32,7 @@ Sahamati addresses this issue taking a simple approach based on node IDs in the 
 In addition to that, Sahamati implements the election timeout with the following tweak:
 
 * the timeout scales based on the node ID (max timeout is still 300ms), this way, nodes with smaller
-IDs have a higher chance of getting smaller election timeouts
+IDs are more likely to have smaller election timeouts
 
 
 ## Example
@@ -42,8 +42,8 @@ IDs have a higher chance of getting smaller election timeouts
 * [`example/kvstore-server/server.go`](example/kvstore-server/server.go) is a basic Chi-router based http server that allows interacting with `kvstore`
 * [`example/kvstore-server/main.go`](example/kvstore-server/main.go) builds the service and runs it.
 
-### Quick Example Run
-* To give a quick spin:
+### Quick Run
+* To give it a quick spin:
 ```shell
 # 1. Clone the repo
 git clone https://github.com/althk/sahamati.git
@@ -81,4 +81,4 @@ make stop_example
 
 * Allow TLS certificate validation for Raft cluster nodes (incl mutual validation)
 * Optimize client communication by proxying request to the leader instead of rejecting a request
-* Add node and cluster-level telemetry out of the box (otel schema) 
+* Add node and cluster-level telemetry out of the box (otel compatible) 
