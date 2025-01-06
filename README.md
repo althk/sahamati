@@ -89,4 +89,7 @@ make stop_example
 
 * Allow TLS certificate validation for Raft cluster nodes (incl mutual validation)
 * Optimize client communication by proxying request to the leader instead of rejecting a request
-* Add node and cluster-level telemetry out of the box (otel compatible) 
+* Add node and cluster-level telemetry out of the box (otel compatible)
+
+#### Credits
+* Apart from the Raft papers at raft.github.io, [Eli Bendersky's blog posts](https://eli.thegreenplace.net/2020/implementing-raft-part-0-introduction/) helped me get started initially.
