@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"github.com/althk/sahamati/proto/v1"
 	"github.com/althk/sahamati/proto/v1/cmv1connect"
+	"github.com/quic-go/quic-go/http3"
 	"net/http"
 	"strings"
 )
@@ -47,7 +48,7 @@ func NewCMClient(addr string, httpOnly bool) *CMClient {
 	} else {
 		skipVerify := strings.HasPrefix(addr, "localhost")
 		httpClient = &http.Client{
-			Transport: &http.Transport{
+			Transport: &http3.Transport{
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: skipVerify,
 				},

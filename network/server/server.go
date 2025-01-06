@@ -14,6 +14,7 @@ import (
 	"github.com/althk/sahamati/proto/v1/cmv1connect"
 	"github.com/althk/sahamati/raft"
 	"github.com/althk/wal"
+	"github.com/quic-go/quic-go/http3"
 	"log/slog"
 	"math/big"
 	"net/http"
@@ -35,7 +36,7 @@ type ClusterConfig struct {
 }
 
 type RaftHTTP struct {
-	httpServer *http.Server
+	httpServer *http3.Server
 	cm         consensusModule
 	cfg        *ClusterConfig
 	nodeID     int
@@ -113,7 +114,7 @@ func newCMServer(cm consensusModule) *CMServer {
 	}
 }
 
-func newHTTPServer(addr string, cm consensusModule, h2c bool, logger *slog.Logger) *http.Server {
+func newHTTPServer(addr string, cm consensusModule, h2c bool, logger *slog.Logger) *http3.Server {
 	var cmServer cmv1connect.CMServiceHandler = newCMServer(cm)
 	mux := http.NewServeMux()
 	p, handler := cmv1connect.NewCMServiceHandler(
@@ -124,11 +125,12 @@ func newHTTPServer(addr string, cm consensusModule, h2c bool, logger *slog.Logge
 	)
 	mux.Handle(p, handler)
 
-	httpServer := &http.Server{
+	httpServer := &http3.Server{
 		Addr:      addr,
 		Handler:   mux,
 		TLSConfig: localhostTLSConfig(),
 	}
+
 	return httpServer
 }
 
@@ -147,7 +149,7 @@ func (srv *RaftHTTP) Serve(ctx context.Context) error {
 		close(shutdownCh)
 	}(ctx)
 
-	err := srv.httpServer.ListenAndServeTLS("", "")
+	err := srv.httpServer.ListenAndServe()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
