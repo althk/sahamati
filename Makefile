@@ -20,7 +20,7 @@ proto:
 	@buf generate
 
 run_example:
-	mkdir /tmp/sahamati
+	test -d /tmp/sahamati/ || mkdir /tmp/sahamati
 	@echo "starting $(CLUSTER_SIZE) nodes"
 	@echo "cluster = $(CLUSTER)"
 	@for i in $(HOSTS); do \
