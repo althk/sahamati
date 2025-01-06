@@ -26,7 +26,7 @@ run_example:
 	@for i in $(HOSTS); do \
   		echo "starting node $$i"; \
   		KVS_PORT=`echo $$i | sed 's/localhost:[0-9]/localhost:8/'`; \
-  		go run ./example/kvstore --kvstore_addr $$KVS_PORT --raft_addr $$i --nodes $(CLUSTER) & \
+  		go run ./example/kvstore-server --kvstore_addr $$KVS_PORT --raft_addr $$i --nodes $(CLUSTER) & \
   	done
 
 # `go run` spawns a child process for each invocation.
