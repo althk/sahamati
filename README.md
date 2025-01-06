@@ -14,6 +14,14 @@ Sahamati uses GRPC-compatible [Connect protocol](https://connectrpc.com/docs/int
 
 Sahamati uses a leveldb based WAL for resilience.
 
+> **NOTE**
+> 
+> While Sahamati is functionally complete and has all the features mentioned above, it is still a work
+> in progress and as such is currently in `alpha`.
+> 
+> `v1.0.0` release is when it can be expected to be production ready.
+> 
+
 ## Optimizations
 
 ### Split Vote Issue
