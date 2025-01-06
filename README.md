@@ -3,14 +3,14 @@ Sanskrit for Consensus
 
 ## About
 
-Sahamati is a [Raft](https://raft.github.io) implementation in Go and has full support for the  following features:
+Sahamati is a [Raft](https://raft.github.io) implementation in Go and has full support for the following features:
 
 * Leader Election + Log Replication
 * Persistence
 * Membership Changes
 * Log Compaction
 
-It uses GRPC-compatible [Connect protocol](https://connectrpc.com/docs/introduction/) HTTP2 transport for communicating between peers in the cluster.
+Sahamati uses GRPC-compatible [Connect protocol](https://connectrpc.com/docs/introduction/) over HTTP3 (QUIC) transport for communicating between peers in the cluster.
 
 Sahamati uses a leveldb based WAL for resilience.
 
@@ -81,5 +81,4 @@ make stop_example
 
 * Allow TLS certificate validation for Raft cluster nodes (incl mutual validation)
 * Optimize client communication by proxying request to the leader instead of rejecting a request
-* Use QUIC for Raft cluster communication (connect protocol supports it)
 * Add node and cluster-level telemetry out of the box (otel schema) 
