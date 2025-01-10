@@ -599,6 +599,7 @@ func (c *ConsensusModule) logState() {
 				slog.Int64("commit-idx", c.commitIndex),
 				slog.Int64("last-applied", c.lastApplied),
 				slog.Int64("real-idx", c.realIdx),
+				slog.Int("log-count", len(c.log)),
 			)
 			c.mu.RUnlock()
 		}
@@ -705,11 +706,11 @@ func (c *ConsensusModule) appendEntry(entry *pb.LogEntry) error {
 	}
 	batch := make(map[string][]byte)
 	batch[fmt.Sprintf("log:%d", entry.RealIdx)] = b
-	if realIdxBytes, err := json.Marshal(c.realIdx); err == nil {
-		batch["realIdx"] = realIdxBytes
-	} else {
-		c.logger.Warn("FAILED: marshaling realIdx", c.realIdx)
+	realIdxBytes, err := json.Marshal(c.realIdx)
+	if err != nil {
+		return err
 	}
+	batch["realIdx"] = realIdxBytes
 	err = c.wal.PutBatch(batch)
 	if err != nil {
 		return err
