@@ -1035,8 +1035,10 @@ func (c *ConsensusModule) restoreFromWAL() {
 			c.log = append(c.log, &entry)
 		}
 	}
-	c.realIdx = c.log[len(c.log)-1].RealIdx
 	c.currentLogSize = len(c.log)
+	if c.currentLogSize > 0 {
+		c.realIdx = c.log[len(c.log)-1].RealIdx
+	}
 	c.logger.Info("Loaded hard state and log entries from WAL",
 		slog.Int("log-size", c.currentLogSize),
 		slog.Int64("commit-index", c.commitIndex),
