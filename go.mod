@@ -7,15 +7,18 @@ require (
 	github.com/althk/wal v0.0.0-20241207170826-88edd8665610
 	github.com/go-chi/chi/v5 v5.2.0
 	github.com/quic-go/quic-go v0.48.2
+	github.com/stretchr/testify v1.10.0
 	golang.org/x/sync v0.10.0
 	google.golang.org/protobuf v1.36.1
 )
 
 require (
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38 // indirect
 	github.com/onsi/ginkgo/v2 v2.9.5 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/syndtr/goleveldb v1.0.0 // indirect
 	go.uber.org/mock v0.4.0 // indirect
@@ -26,4 +29,5 @@ require (
 	golang.org/x/sys v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
