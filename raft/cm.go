@@ -281,6 +281,8 @@ func (c *ConsensusModule) sendVoteRequest(peer Peer, term int, idx int64, logTer
 	resp, err := cli.RequestVote(context.TODO(), &req)
 	if err != nil {
 		// handle error
+		c.logger.Warn("failed to send vote request", slog.String("peer", peer.Addr),
+			"err", err)
 		return
 	}
 	c.processVoteResponse(term, resp)
@@ -387,7 +389,7 @@ func (c *ConsensusModule) sendAppendEntriesToPeer(peer Peer, savedTerm int, hear
 
 	ni := c.nextIndex[peer.ID]
 	if !heartbeat && int(ni-c.snapshotIndex) <= len(c.log) {
-		c.logger.Info("Checking AE entries for peer", slog.Int("peer-id", peer.ID),
+		c.logger.Debug("Checking AE entries for peer", slog.Int("peer-id", peer.ID),
 			slog.Int64("ni", ni))
 		if c.snapshotIndex >= 0 && ni <= c.snapshotIndex {
 			// TODO: if ni <= c.snapshotIndex, issue InstallSnapshot RPC
@@ -418,6 +420,7 @@ func (c *ConsensusModule) sendAppendEntriesToPeer(peer Peer, savedTerm int, hear
 
 	resp, err := cli.AppendEntries(context.TODO(), &req)
 	if err != nil {
+		c.logger.Warn("error sending AEs", "err", err, "peer", peer.ID)
 		return
 	}
 	c.processAppendEntriesResponse(&req, resp, peer, heartbeat)
@@ -432,7 +435,7 @@ func (c *ConsensusModule) processAppendEntriesResponse(req *pb.AppendEntriesRequ
 
 	c.mu.Lock()
 	if !hb {
-		c.logger.Info("processing AE response", slog.Int("peer-id", peer.ID),
+		c.logger.Debug("processing AE response", slog.Int("peer-id", peer.ID),
 			slog.Int("count", len(req.Entries)))
 	}
 	if c.state == Leader && resp.Term == req.Term {
@@ -446,7 +449,7 @@ func (c *ConsensusModule) processAppendEntriesResponse(req *pb.AppendEntriesRequ
 		if len(req.Entries) > 0 {
 			c.nextIndex[peer.ID] += int64(len(req.Entries))
 			c.matchIndex[peer.ID] = max(c.nextIndex[peer.ID]-1, 0)
-			c.logger.Info("AppendEntries completed, updating index",
+			c.logger.Debug("AppendEntries completed, updating index",
 				slog.String("peer", peer.Addr),
 				slog.Int64("nextIndex", c.nextIndex[peer.ID]),
 				slog.Int64("matchIndex", c.matchIndex[peer.ID]),
@@ -544,7 +547,7 @@ func (c *ConsensusModule) HandleAppendEntriesRequest(_ context.Context, req *pb.
 
 	prevLogIdx := req.PrevLogIdx
 
-	c.logger.Info("Appending new entries",
+	c.logger.Debug("Appending new entries",
 		slog.String("entries", fmt.Sprintf("%v", req.Entries)),
 		slog.Int64("prevLogIdx", prevLogIdx),
 		slog.Int64("realIdx", c.realIdx))
@@ -636,10 +639,10 @@ func (c *ConsensusModule) Propose(cmd []byte) (int64, error) {
 }
 
 func (c *ConsensusModule) advanceCommitIndex() {
-	c.logger.Info("advancing commit index")
+	c.logger.Debug("advancing commit index")
 	c.mu.Lock()
 	commitIdx := c.commitIndex
-	for i := commitIdx + 1; i <= c.realIdx; i++ {
+	for i := c.commitIndex + 1; i <= c.realIdx; i++ {
 		if c.log[i-(c.snapshotIndex+1)].Term == int32(c.currentTerm) {
 			count := 1
 			for _, peer := range c.peers {
@@ -651,17 +654,20 @@ func (c *ConsensusModule) advanceCommitIndex() {
 				}
 			}
 			if count > len(c.peers)/2 {
-				if err := c.setCommitIndex(i); err != nil {
-					c.commitIndex = i
-				}
+				commitIdx++
 			}
 		}
 	}
 	c.logger.Info("advanced commit index",
-		slog.Int64("commit-index", c.commitIndex),
-		slog.Int64("prev-commit-index", commitIdx),
+		slog.Int64("prev-commit-index", c.commitIndex),
+		slog.Int64("commit-index", commitIdx),
 	)
-	if commitIdx < c.commitIndex {
+	if commitIdx > c.commitIndex {
+		if err := c.setCommitIndex(commitIdx); err != nil {
+			c.logger.Error("Failed to set commit index", "idx", commitIdx, "err", err)
+			c.mu.Unlock()
+			return
+		}
 		c.mu.Unlock()
 		c.applyCommits()
 		// c.aeReadyCh <- true
@@ -676,7 +682,7 @@ func (c *ConsensusModule) applyCommits() {
 		slog.Int64("commitidx", c.commitIndex),
 		slog.Int64("lastapplied", c.lastApplied))
 	c.mu.Lock()
-	for c.lastApplied < c.commitIndex {
+	for c.lastApplied < c.commitIndex && int(c.lastApplied-(c.snapshotIndex+1)) < len(c.log) {
 		c.lastApplied++
 		entry := c.log[c.lastApplied-(c.snapshotIndex+1)]
 		var cfg configChange

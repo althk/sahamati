@@ -7,6 +7,7 @@ import (
 	"github.com/althk/sahamati/network/server"
 	"github.com/althk/sahamati/snapshotter"
 	"golang.org/x/sync/errgroup"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -23,17 +24,28 @@ including the current host, in the form 'host1:port1,host2:port2'`)
 	join          = flag.Bool("join", false, "join an already running cluster (skip election)")
 	walDir        = flag.String("wal_dir", "/tmp/sahamati", "directory for writing WAL files")
 	snapshotDir   = flag.String("snapshot_dir", "/tmp/sahamati", "directory for snapshot file(s)")
+	logDir        = flag.String("log_dir", "/tmp/sahamati", "directory for snapshot file(s)")
 	maxLogEntries = flag.Int("max_log_entries", 100000, "max number of log entries before triggering log compaction")
 )
 
 func main() {
 	flag.Parse()
+	addrName := strings.Replace(*raftAddr, ":", "_", -1)
+	logFile, err := os.OpenFile(path.Join(*logDir, fmt.Sprintf("slog_%s.log", addrName)),
+		os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644)
+	if err != nil {
+		slog.Error("failed to open log file", "file", addrName)
+		panic(err)
+	}
+	defer func() {
+		_ = logFile.Close()
+	}()
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-
+	logger := slog.New(slog.NewJSONHandler(io.MultiWriter(os.Stdout, logFile), nil))
+	//logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	snapper, err := snapshotter.NewLocalFile(
 		path.Join(*snapshotDir,
-			fmt.Sprintf("snapshot_%s.bin", strings.Replace(*raftAddr, ":", "_", -1)),
+			fmt.Sprintf("snapshot_%s.bin", addrName),
 		))
 	if err != nil {
 		panic(err)

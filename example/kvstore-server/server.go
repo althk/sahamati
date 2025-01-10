@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"io"
 	"log"
 	"log/slog"
 	"net/http"
+	"sort"
 	"time"
 )
 
@@ -62,6 +64,8 @@ func (s *HTTPServer) Routes() chi.Router {
 	r.Use(middleware.Logger)
 
 	r.Route(s.mntPoint, func(r chi.Router) {
+		r.Get("/state", s.GetState)
+		r.Get("/vals", s.Values)
 		r.Get("/{key}", s.Get)
 		r.Post("/", s.Post)
 		r.Put("/{key}", s.Put)
@@ -119,6 +123,7 @@ func (s *HTTPServer) Post(w http.ResponseWriter, r *http.Request) {
 	key, value := e["key"], e["value"]
 	_, ok, err := s.store.Get(key)
 	if ok {
+		s.logger.Error("key already exists", "key", key)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
@@ -129,9 +134,29 @@ func (s *HTTPServer) Post(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 			return
 		}
+		s.logger.Error(err.Error(), "key", key)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
 	_, _ = w.Write([]byte("OK"))
+}
+
+func (s *HTTPServer) GetState(w http.ResponseWriter, _ *http.Request) {
+	c := s.store.Count()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(fmt.Sprintf("%d", c)))
+}
+
+func (s *HTTPServer) Values(w http.ResponseWriter, _ *http.Request) {
+	vals := make([]string, s.store.Count())
+	for v := range s.store.Values() {
+		vals = append(vals, v)
+	}
+	sort.Strings(vals)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	b, _ := json.Marshal(vals)
+	_, _ = w.Write(b)
 }

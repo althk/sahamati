@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	pb "github.com/althk/sahamati/proto/v1"
+	"iter"
 	"log/slog"
 	"sync"
 )
@@ -17,7 +18,7 @@ type KVStore struct {
 	respMap   map[int64]chan struct{}
 	proposeCB func(cmd []byte) (int64, error)
 	ready     bool
-	mu        sync.Mutex
+	mu        sync.RWMutex
 	logger    *slog.Logger
 }
 
@@ -34,14 +35,13 @@ func (k *KVStore) Put(key, value string) error {
 		return ErrStoreNotReady
 	}
 	k.mu.Lock()
-	defer k.mu.Unlock()
 	ch, err := k.propose(key, value)
+	k.mu.Unlock()
 	if err != nil {
 		return err
 	}
 	k.logger.Info("Waiting for consensus")
 	<-ch
-	k.store[key] = value
 	return nil
 }
 
@@ -50,7 +50,6 @@ func (k *KVStore) propose(key, value string) (<-chan struct{}, error) {
 	e["key"] = key
 	e["value"] = value
 	b, _ := json.Marshal(e)
-	k.logger.Info("Proposing key", key, value)
 	id, err := k.proposeCB(b)
 	k.logger.Info("Proposed key", key, value, "realIdx", id)
 	if err != nil {
@@ -65,6 +64,8 @@ func (k *KVStore) Get(key string) (string, bool, error) {
 	if !k.ready {
 		return "", false, ErrStoreNotReady
 	}
+	k.mu.RLock()
+	defer k.mu.RUnlock()
 	v, ok := k.store[key]
 	return v, ok, nil
 }
@@ -79,7 +80,9 @@ func (k *KVStore) ApplyEntries(entries []*pb.LogEntry) error {
 			continue
 		}
 		k.logger.Info("Applying entry", entry["key"], entry["value"], "realIdx", e.RealIdx)
+		k.mu.Lock()
 		k.store[entry["key"]] = entry["value"]
+		k.mu.Unlock()
 		if ch, ok := k.respMap[e.RealIdx]; ok {
 			close(ch)
 		}
@@ -111,4 +114,18 @@ func (k *KVStore) Start(proposeCB func(cmd []byte) (int64, error)) {
 	k.logger.Info("ready to accept requests")
 	k.proposeCB = proposeCB
 	k.ready = true
+}
+
+func (k *KVStore) Count() int {
+	return len(k.store)
+}
+
+func (k *KVStore) Values() iter.Seq[string] {
+	return func(yield func(string) bool) {
+		for _, v := range k.store {
+			if !yield(v) {
+				return
+			}
+		}
+	}
 }
