@@ -9,6 +9,7 @@ import (
 	"github.com/althk/sahamati/network/client"
 	pb "github.com/althk/sahamati/proto/v1"
 	"github.com/althk/wal"
+	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 	"log/slog"
 	"math/rand"
@@ -682,7 +683,7 @@ func (c *ConsensusModule) applyCommits() {
 		slog.Int64("commitidx", c.commitIndex),
 		slog.Int64("lastapplied", c.lastApplied))
 	c.mu.Lock()
-	for c.lastApplied < c.commitIndex && int(c.lastApplied-(c.snapshotIndex+1)) < len(c.log) {
+	for c.lastApplied < c.commitIndex && int(c.lastApplied-(c.snapshotIndex+1)) < len(c.log)-1 {
 		c.lastApplied++
 		entry := c.log[c.lastApplied-(c.snapshotIndex+1)]
 		var cfg configChange
@@ -1043,6 +1044,15 @@ func (c *ConsensusModule) restoreFromWAL() {
 		}
 	}
 	c.currentLogSize = len(c.log)
+	slices.SortFunc(c.log, func(a, b *pb.LogEntry) int {
+		if a.RealIdx < b.RealIdx {
+			return -1
+		}
+		if a.RealIdx > b.RealIdx {
+			return 1
+		}
+		return 0
+	})
 	if c.currentLogSize > 0 {
 		c.realIdx = c.log[len(c.log)-1].RealIdx
 	}
