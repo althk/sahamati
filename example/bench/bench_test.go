@@ -2,9 +2,11 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/stretchr/testify/require"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -35,6 +37,15 @@ func BenchmarkPut(b *testing.B) {
 			require.Equal(b, http.StatusCreated, resp.StatusCode)
 		}
 	})
+	b.StopTimer()
+	resp, err := http.Get(*getURL + "/state")
+	require.NoError(b, err, b.N)
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(b, err, b.N)
+	var count int64
+	err = json.Unmarshal(data, &count)
+	require.NoError(b, err, b.N)
+	b.ReportMetric(float64(count)/b.Elapsed().Seconds(), "creates/s")
 }
 
 func init() {

@@ -85,11 +85,27 @@ To stop the cluster:
 make stop_example
 ```
 
+## Benchmarks
+
+### Example `kvstore` `POST` adding new entries [benchmark code](./example/bench/bench_test.go)
+```shell
+zsh 5424  (git)-[main]-% go test -bench . ./example/bench -args --post-url "http://localhost:8001/kvs" --get-url "http://localhost:8002/kvs"
+goos: linux
+goarch: amd64
+pkg: github.com/althk/sahamati/example/bench
+cpu: AMD Ryzen 7 7700X 8-Core Processor             
+BenchmarkPut-16    	   18567	    106863 ns/op	     14718 creates/s
+PASS
+ok  	github.com/althk/sahamati/example/bench	3.142s
+```
+This is with a cluster size of 3 nodes.
+
 ## TODOs (in no particular order)
 
 * Allow TLS certificate validation for Raft cluster nodes (incl mutual validation)
 * Optimize client communication by proxying request to the leader instead of rejecting a request
 * Add node and cluster-level telemetry out of the box (otel compatible)
 
-#### Credits
+## Credits
 * Apart from the Raft papers at raft.github.io, [Eli Bendersky's blog posts](https://eli.thegreenplace.net/2020/implementing-raft-part-0-introduction/) helped me get started initially.
+
