@@ -21,17 +21,17 @@ const (
 )
 
 func BenchmarkPut(b *testing.B) {
-	cli := http.Client{
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		}}}
 
 	b.RunParallel(func(pb *testing.PB) {
+		cli := http.Client{
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			}}}
 		for pb.Next() {
 			nanos := time.Now().UnixNano()
 			data := fmt.Sprintf("{\"key\": \"%d\", \"value\": \"val_%d\"}", nanos, nanos)
 			resp, err := cli.Post(*postURL, contentType, strings.NewReader(data))
-			require.NoError(b, err)
+			require.NoError(b, err, b.N)
 			require.Equal(b, http.StatusCreated, resp.StatusCode)
 		}
 	})
