@@ -40,7 +40,7 @@ func (k *KVStore) Put(key, value string) error {
 	if err != nil {
 		return err
 	}
-	k.logger.Info("Waiting for consensus")
+	k.logger.Debug("Waiting for consensus")
 	<-ch
 	return nil
 }
@@ -64,14 +64,15 @@ func (k *KVStore) Get(key string) (string, bool, error) {
 	if !k.ready {
 		return "", false, ErrStoreNotReady
 	}
-	k.mu.RLock()
-	defer k.mu.RUnlock()
+	k.mu.Lock()
+	defer k.mu.Unlock()
 	v, ok := k.store[key]
 	return v, ok, nil
 }
 
 func (k *KVStore) ApplyEntries(entries []*pb.LogEntry) error {
 	k.logger.Info("Applying entries", "count", len(entries))
+	k.mu.Lock()
 	for _, e := range entries {
 		var entry map[string]string
 		err := json.Unmarshal(e.Command, &entry)
@@ -80,13 +81,12 @@ func (k *KVStore) ApplyEntries(entries []*pb.LogEntry) error {
 			continue
 		}
 		k.logger.Info("Applying entry", entry["key"], entry["value"], "realIdx", e.RealIdx)
-		k.mu.Lock()
 		k.store[entry["key"]] = entry["value"]
-		k.mu.Unlock()
 		if ch, ok := k.respMap[e.RealIdx]; ok {
 			close(ch)
 		}
 	}
+	k.mu.Unlock()
 	return nil
 }
 

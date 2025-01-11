@@ -79,7 +79,7 @@ func NewRaftHTTP(cfg *ClusterConfig) (*RaftHTTP, error) {
 	srv.cm = raft.NewConsensusModule(
 		srv.nodeID, peers, cfg.SM, cfg.Snapper,
 		cfg.MaxLogEntries, cfg.JoinCluster,
-		w, srv.logger.With(slog.String("svc", "raft-cm")),
+		w, cfg.Logger.With(slog.String("svc", "raft-cm")),
 	)
 	srv.httpServer = newHTTPServer(srv.cfg.Addr, srv.cm, cfg.H2c, srv.logger)
 	return srv, nil

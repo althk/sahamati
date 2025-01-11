@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"io"
 	"log"
 	"log/slog"
@@ -60,8 +59,6 @@ func (s *HTTPServer) Serve(ctx context.Context) error {
 
 func (s *HTTPServer) Routes() chi.Router {
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID)
-	r.Use(middleware.Logger)
 
 	r.Route(s.mntPoint, func(r chi.Router) {
 		r.Get("/state", s.GetState)
@@ -121,20 +118,20 @@ func (s *HTTPServer) Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	key, value := e["key"], e["value"]
-	_, ok, err := s.store.Get(key)
+	s.logger.Info("POST request", slog.String("key", key), slog.String("value", value))
+	v, ok, err := s.store.Get(key)
 	if ok {
-		s.logger.Error("key already exists", "key", key)
+		s.logger.Error("err: key already exists", "key", key, "value", v)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	s.logger.Info("POST request", slog.String("key", key), slog.String("value", value))
 	err = s.store.Put(key, value)
 	if err != nil {
 		if errors.Is(err, ErrStoreNotReady) {
 			http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 			return
 		}
-		s.logger.Error(err.Error(), "key", key)
+		s.logger.Error(err.Error(), "post-key", key)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -150,7 +147,7 @@ func (s *HTTPServer) GetState(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *HTTPServer) Values(w http.ResponseWriter, _ *http.Request) {
-	vals := make([]string, s.store.Count())
+	vals := make([]string, 0)
 	for v := range s.store.Values() {
 		vals = append(vals, v)
 	}

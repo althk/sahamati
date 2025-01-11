@@ -281,8 +281,8 @@ func (c *ConsensusModule) sendVoteRequest(peer Peer, term int, idx int64, logTer
 	resp, err := cli.RequestVote(context.TODO(), &req)
 	if err != nil {
 		// handle error
-		c.logger.Warn("failed to send vote request", slog.String("peer", peer.Addr),
-			"err", err)
+		//c.logger.Warn("failed to send vote request", slog.String("peer", peer.Addr),
+		//	"err", err)
 		return
 	}
 	c.processVoteResponse(term, resp)
@@ -403,7 +403,7 @@ func (c *ConsensusModule) sendAppendEntriesToPeer(peer Peer, savedTerm int, hear
 				prevLogTerm = int(c.log[prevLogIdx-(c.snapshotIndex+1)].Term)
 			}
 			entries = c.log[ni-(c.snapshotIndex+1):]
-			c.logger.Info("Sending AEs", slog.Int("peer-id", peer.ID),
+			c.logger.Debug("Sending AEs", slog.Int("peer-id", peer.ID),
 				slog.Int("entries", len(entries)), slog.Int("log-size", len(c.log)),
 				slog.Int64("ni", ni))
 		}
@@ -420,7 +420,7 @@ func (c *ConsensusModule) sendAppendEntriesToPeer(peer Peer, savedTerm int, hear
 
 	resp, err := cli.AppendEntries(context.TODO(), &req)
 	if err != nil {
-		c.logger.Warn("error sending AEs", "err", err, "peer", peer.ID)
+		//c.logger.Warn("error sending AEs", "err", err, "peer", peer.ID)
 		return
 	}
 	c.processAppendEntriesResponse(&req, resp, peer, heartbeat)
@@ -627,7 +627,7 @@ func (c *ConsensusModule) Propose(cmd []byte) (int64, error) {
 		Term:    int32(c.currentTerm),
 		RealIdx: idx,
 	}
-	c.logger.Info("Proposing entry", slog.Int64("real-index", idx))
+	c.logger.Debug("Proposing entry", slog.Int64("real-index", idx))
 	err := c.appendEntry(entry)
 	if err != nil {
 		c.mu.Unlock()
@@ -658,7 +658,7 @@ func (c *ConsensusModule) advanceCommitIndex() {
 			}
 		}
 	}
-	c.logger.Info("advanced commit index",
+	c.logger.Debug("advanced commit index",
 		slog.Int64("prev-commit-index", c.commitIndex),
 		slog.Int64("commit-index", commitIdx),
 	)
@@ -678,7 +678,7 @@ func (c *ConsensusModule) advanceCommitIndex() {
 
 func (c *ConsensusModule) applyCommits() {
 	var entries []*pb.LogEntry
-	c.logger.Info("applying commits",
+	c.logger.Debug("applying commits",
 		slog.Int64("commitidx", c.commitIndex),
 		slog.Int64("lastapplied", c.lastApplied))
 	c.mu.Lock()

@@ -60,7 +60,7 @@ func main() {
 		Snapper:       snapper,
 		SM:            sm,
 		H2c:           *h2c,
-		Logger:        logger.With(slog.String("svc", "raft")),
+		Logger:        logger,
 	}
 	srv, err := server.NewRaftHTTP(cfg)
 	if err != nil {
