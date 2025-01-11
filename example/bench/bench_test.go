@@ -30,7 +30,6 @@ func BenchmarkPut(b *testing.B) {
 		for pb.Next() {
 			nanos := time.Now().UnixNano()
 			data := fmt.Sprintf("{\"key\": \"%d\", \"value\": \"val_%d\"}", nanos, nanos)
-			fmt.Println("posting ", data)
 			resp, err := cli.Post(*postURL, contentType, strings.NewReader(data))
 			require.NoError(b, err)
 			require.Equal(b, http.StatusCreated, resp.StatusCode)
